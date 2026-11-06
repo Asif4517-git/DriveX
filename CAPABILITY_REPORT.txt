@@ -1,0 +1,287 @@
+DRIVEX — AI CAPABILITY AUDIT AND OPEN-SOURCE GAME DISCOVERY
+Date: 2026-11-06 (UTC). Repository: https://github.com/Asif4517-git/DriveX
+Scope: research only; no game, assets, or source code created. Capabilities are
+for this session, not a guarantee of future availability or output quality.
+
+STATUS KEY
+VERIFIED = a specific test actually succeeded; see evidence and its scope.
+AVAILABLE = the relevant tool/interface exists but was not exercised.
+LIMITED = potentially feasible, but untested or materially constrained; not a
+          claim of completed work. UNAVAILABLE = not currently accessible.
+Project descriptions below are upstream claims unless explicitly called source
+inspection; no project was downloaded, copied, run locally, or integrated.
+
+1. AVAILABLE TOOLS AND SOFTWARE
+VERIFIED — Shell, Git 2.39.5, GitHub CLI 2.23.0,
+Node.js 22.22.3, npm 10.9.8 and Python 3.11.2 are present; shell, Git, gh,
+Node, npm metadata and Python were exercised. GCC and G++ and ImageMagick's
+convert exist on PATH; compilation and image editing were not tested.
+AVAILABLE — File reading/writing/editing, web search/page extraction, image
+search/generation, speech generation and background-server tools are exposed;
+not all were exercised. Supabase and Vercel are enabled for the conversation,
+but their actual connector permissions, resources and deployment are untested.
+LIMITED — Approximately 20 GB free disk and 3.8 GiB memory at inspection;
+no /dev/dri GPU device found. Network shell access is restricted to approved
+GitHub and package-registry hosts, not unrestricted internet.
+UNAVAILABLE — Blender, Godot, Unity, Chromium, Chrome and Firefox executables
+were not found on PATH; no interactive browser-control tool was exposed. This
+is a PATH/environment observation, not proof they could never be installed.
+
+2. BLENDER AND 3D MODELLING
+UNAVAILABLE — Launch/control Blender, Blender Python, Blender rendering and
+Blender physics right now: executable absent. No Blender install attempted.
+LIMITED — Cars from scratch; detailed interiors, bodywork, headlights and
+wheels; roads, buildings, trees; realistic PBR materials/textures; animation;
+physics; lighting/reflections; game-ready meshes and LOD: conceptually possible
+with appropriate software, assets and iteration, but none created or quality-
+validated here. Photorealism and production asset quality are not established.
+LIMITED — Export GLB/glTF, FBX or OBJ: formats are possible with suitable
+software/libraries, but no exporter is installed/verified or export tested.
+A rendered car IMAGE is a flat picture, not a rigged, textured 3D mesh and not
+a functional vehicle. A mesh also requires colliders, inputs, physics and game
+integration before it is drivable.
+
+3. GAME ENGINES AND GAMEPLAY
+LIMITED — Three.js and Babylon.js can potentially be installed from npm;
+Three.js npm metadata was retrieved, but neither engine was installed, executed
+or rendered. WebGL and WebGPU execution and GPU support were not tested.
+UNAVAILABLE — Locally launching Godot or Unity now; neither binary on PATH.
+Other browser/desktop engines: no engine execution verified.
+LIMITED — Implementation of steering, acceleration, braking, realistic vehicle
+physics, suspension, tire dynamics and manual/automatic transmission: code can
+be developed in principle, but no implementation or realism has been validated.
+LIMITED — AI traffic/opponents, open world, weather, day/night, customization,
+garage, dealership, sound, particles and saves: implementable in principle,
+but none built or tested. Multiplayer additionally needs networking, security,
+latency handling, deployment and potentially a signaling or game server.
+None of these gameplay claims is VERIFIED by this audit.
+
+4. PROGRAMMING AND DEVELOPMENT
+VERIFIED — Shell commands and Node/Python execution: each evaluated 6*7 to 42.
+VERIFIED — A Node HTTP server bound to loopback, returned HTTP 200 and body
+'audit-ok', then stopped. This demonstrates local HTTP only, not live-preview
+access, a production server or a game.
+AVAILABLE — GCC/G++ binaries are present; compilation was not tested. Other
+languages might be installable; no claim of Java, Go, Rust or C# execution.
+LIMITED — npm registry metadata query 'npm view three version' returned
+0.187.0; actual package installation, native builds and dependency safety were
+not tested. Network restrictions can prevent downloads.
+VERIFIED — Read local README and repository status, and wrote this report.
+LIMITED — Debugging and automated tests: Node/Python and inspection provide a
+basis, but no game test suite, browser debugging or profiling was run.
+LIMITED — Large-project work is possible in stages, subject to context,
+resource, network and persistence limits; not stress-tested.
+UNAVAILABLE — Interactive browser input/testing in the current tool set.
+Page extraction is not equivalent to driving, rendering inspection or measuring
+compatibility on ordinary desktop hardware.
+
+5. ASSET GENERATION
+AVAILABLE — Image generation/editing and image search tools exist, including
+vehicle pictures, textures and UI graphics in principle; deliberately not used
+because the user prohibited generating assets. Output rights/quality must be
+reviewed. Speech synthesis is available for spoken audio, not singing or a
+verified sound-effects generator.
+LIMITED — Procedural 3D model/environment creation, image/model conversion,
+sound effects and game integration require suitable libraries/tools and
+license-cleared sources; none produced, converted or integrated. A flat image
+generator is not a 3D model generator. Original high-fidelity automotive
+modeling and realistic sound have not been demonstrated.
+
+6. BROWSER AND RESEARCH
+VERIFIED — Web search found GitHub projects and Kenney's car kit page; GitHub
+CLI read repository metadata, licenses, README text, file lists and selected
+source snippets. Web page extraction loaded LibreCorsa's title/ready screen and
+Overdrive City's HUD text. CarRace's extracted page reported 'Failed to fetch
+dynamically imported module'; this may be a limitation of the extraction
+service and is not evidence the live game is broken for normal users.
+LIMITED — Documentation, asset libraries and real-vehicle references may be
+researched where accessible; search/extraction coverage and shell outbound
+access are restricted. No live demo was interactively controlled; no desktop
+browser, WebGL, FPS, graphics quality or handling was tested. Do not treat page
+text or screenshots as proof of a working game.
+
+7. GITHUB AND 8. DEPLOYMENT
+VERIFIED — Existing checkout's origin is the requested GitHub repository;
+branch arena/ebb123d9-drivex began at 1391ad73ff37f3dd98757d596104a6d2875ce785.
+Initial tracked files: README.md only, containing '# DriveX'; worktree clean.
+'gh repo view' returned public repo and ADMIN permission. 'git ls-remote --heads
+origin' returned main at that commit. 'git push --dry-run origin
+HEAD:refs/heads/arena/ebb123d9-drivex' succeeded and reported a new branch.
+The checkout was supplied; a fresh clone was not performed.
+LIMITED — Commit and actual push are intended after writing this report; a
+successful dry run does not establish an actual push. Check the final response
+and GitHub branch history for the actual outcome; this report cannot truthfully
+record its own later push before it happens.
+LIMITED — Can author GitHub Actions configuration in principle; no workflow
+created/run. Pages API returned HTTP 404 for this repo, which may mean not
+configured or inaccessible; no Pages enablement or deployment was attempted.
+Deployment failure diagnosis can use accessible logs/configuration, but no
+failure was diagnosed. Vercel/Supabase integration exists as enabled connectors,
+but permissions and deployment capabilities are not verified.
+
+9. PERFORMANCE OPTIMIZATION
+LIMITED — Mesh simplification, texture compression/resizing, LOD, batching,
+instancing, culling, lighting budgets, streaming and performance measurement
+are known approaches, not tested here. No model was optimized, no frame time or
+memory profile measured and no ordinary-desktop target validated. Suitable
+profilers, browser/GPU access, representative devices and performance budgets
+would be needed. Quality and performance tradeoffs must be measured.
+
+10. VERIFIED TESTS AND EVIDENCE SUMMARY
+- Clean worktree; git ls-files listed only README.md; content inspected.
+- gh auth status succeeded; gh repo view showed ADMIN on the specified repo.
+- git ls-remote succeeded; push dry run succeeded to this session's branch only.
+- node -e and python3 -c both returned 42; node loopback HTTP returned 200.
+- npm view three version returned 0.187.0; no npm install was performed.
+- command -v checks found no Blender, Godot, Unity or named browser; no GPU
+  device appeared under /dev/dri. Absence checks are limited to these paths.
+- GitHub API license and selected source inspection and web search succeeded;
+  demo extraction results are described above, not gameplay verification.
+
+11. LIMITATIONS, ASSISTANCE AND ASSESSMENT
+LIMITED — High-quality realistic 3D browser racing game independently: I can
+contribute research, architecture and code, but cannot honestly guarantee an
+independently finished, photorealistic, polished game from this environment.
+It requires proven 3D tooling, licensed models/audio, hands-on browser/GPU and
+hardware testing, tuning against reference data, iterative art direction,
+security and multiplayer infrastructure, QA and potentially a significant
+team/budget. A simpler browser prototype is plausible but unverified.
+Human help may be needed for licensing/legal review, artistic approval,
+real-car branding rights, Blender/model production, real-device testing,
+deployment configuration and accounts. No legal advice is provided.
+
+12. OPEN-SOURCE GAME DISCOVERY
+Research date: 2026-11-06. These are ten candidates, not ten independently
+validated playable games. GitHub API checked each LICENSE file and latest push
+date; a recent push is only an activity signal, not proof of support. All are
+MIT code licenses; retain copyright and license notices. Verify every asset,
+dependency and trademark separately, even where the repository says MIT.
+Graphics, modes and handling below are upstream claims or limited source
+inspection; no normal-desktop gameplay, visual fidelity or performance test
+was possible. Integration effort is an estimate, not an actual trial.
+
+1) LibreCorsa — https://github.com/KhazP/librecorsa
+Demo: https://librecorsa.org/ (page extraction reached ready screen; no input).
+TypeScript, Next.js/React, Three.js WebGL2; code LICENSE MIT, pushed Nov 6
+2026. Upstream describes actual imported 3D cars, 500 Hz physics, suspension,
+thermal tires, AI, circuits and P2P multiplayer; source tree includes src/lib,
+components and verification scripts. Physics realism/claims not independently
+measured. Track-focused, not a complete open-world game. Strong physics and
+race-system candidate, but integration is high effort. README separately lists
+Mercedes-AMG GT3 CC BY-NC-SA 4.0 and some public assets restricted to
+noncommercial/educational use; 2026 car CC BY 4.0. Audit every asset and
+replace incompatible ones before commercial distribution; trademarks too.
+
+2) Nurburgring Drive — https://github.com/esc5221/drive-game
+Demo: https://drive-game.pages.dev/ (not opened interactively). JavaScript,
+Three.js, custom 240 Hz physics; LICENSE text says MIT for code despite GitHub
+API classifying whole file NOASSERTION; pushed July 10 2026. README describes
+imported real 3D vehicles, suspension, tires, weather and real tracks. Source
+folder lists physics.js, car.js, rain.js and net.js; functionality untested.
+Reuse code only after license review; OSM-derived track data ODbL, Porsche
+model CC BY-SA 4.0 and Hyundai CC BY-NC 4.0, per credits. Track/data share-alike
+and noncommercial restrictions require careful segregation or replacement.
+High effort to adapt beyond circuit driving; project calls itself fan/noncommercial.
+
+3) CarRace — https://github.com/alexander-uspenskiy/CarRace
+Demo: https://alexander-uspenskiy.github.io/CarRace/ (extraction reported
+module-fetch failure; no gameplay test). JavaScript/Three.js, MIT LICENSE;
+pushed Oct 15 2026. Source tree separates src/sim (carPhysics, AI, collisions,
+tyres) and render. README claims procedural 3D Formula cars, three tracks,
+19 AI drivers, garage upgrades, saved records and synthesized sound. Candidate
+for race-flow, UI and AI; stylized procedural vehicles, not realistic licensed
+car meshes; physics quality not measured. Medium-high integration; Formula
+brand/team names and liveries require independent trademark/IP clearance.
+
+4) Overdrive City — https://github.com/appleweiping/overdrive-city
+Demo: https://appleweiping.github.io/overdrive-city/ (HUD extracted only).
+JavaScript, Three.js, MIT LICENSE; pushed Oct 23 2026. Source inspection found
+traffic.js implementing lane directions/intersection choices and imports of
+Vehicle; README describes procedural 3D city, vehicles, traffic and day/night.
+Promising open-world architecture and traffic, not verified handling or asset
+quality. Simple stylized cars and acknowledged limited physics need replacement
+for realism. Medium-high effort; Three.js also MIT, check all notices.
+
+5) Raycast RC Car — https://github.com/icurtis1/raycast-vehicle
+Demo: https://raycast-rc-car.netlify.app/ (not played). JavaScript, Three.js,
+cannon-es; MIT LICENSE; pushed July 6 2026. Direct inspection of src/Vehicle.js
+found GLTFLoader, CANNON.RaycastVehicle, setSteeringValue, applyEngineForce
+and setBrake calls, plus body and separate wheel GLB imports. This is evidence
+of a 3D vehicle/physics implementation in source, NOT evidence it runs well.
+README describes arcade RC handling, suspension rays, GLB level and controls.
+Useful compact physics/controller example; needs realistic vehicle dynamics,
+world and content. Medium adaptation; verify GLB asset provenance separately.
+
+6) Sketchbook — https://github.com/swift502/Sketchbook
+Demo: https://jblaha.art/sketchbook/latest (not played). TypeScript, Three.js,
+Cannon.js, MIT LICENSE; archived, last push Oct 10 2024. README describes 3D
+playground and Blender scene workflow with vehicles/characters, not a finished
+racing game. Reuse architectural ideas and code with notice; independently
+check asset licenses. Older dependencies, archived maintenance, and limited
+racing systems make integration high effort. Actual cars and controls untested.
+
+7) Racing Games — https://github.com/monon98/racing-games
+Demo: https://monon98.github.io/racing-games/ (not played). TypeScript/Vite,
+Three.js, cannon-es; MIT LICENSE; pushed Nov 4 2026. README describes
+procedurally generated 3D car, four-wheel suspension, two track modes, GLB
+import/export and local records. Functional gameplay and fidelity untested.
+Potential prototype for tracks and physics; replace simple visuals, add AI
+and open world. Medium-high integration; inspect dependencies and licenses.
+
+8) Neon Drive — https://github.com/evildevill/car-game
+Demo: none identified. TypeScript/Vite/Three.js WebGL, MIT LICENSE; pushed
+Oct 28 2026. README describes procedural car-shaped 3D geometry and city,
+traffic obstacles, collision, boost, touch and saved scores; explicitly arcade
+lane/position collision, not a vehicle simulation. Whether the car actually
+moves was not tested. Useful traffic-dodger/HUD ideas, not realistic physics;
+medium-high adaptation and a full handling rewrite needed.
+
+9) RPG Car Game — https://github.com/rsamwilson2323-cloud/rpg-car-game
+Demo: none identified. HTML/JavaScript, Three.js WebGPU and Rapier; MIT
+LICENSE; pushed Sep 14 2026. README claims physics vehicle with four-wheel
+configuration, procedural biomes, collectibles and upgrades. 3D car type,
+source asset provenance, renderer compatibility and actual driving are not
+verified. Useful off-road/progression ideas; WebGPU compatibility/fallback and
+Rapier-versus-other-physics integration need proof. High effort; check all
+third-party dependencies and assets.
+
+10) ThreeJS SimpleCarPhysics — https://github.com/juwalbose/ThreeJS_SimpleCarPhysics
+Demo: https://c9.io/juwalbose/threejs_simplecar (linked upstream; not played,
+possibly obsolete). JavaScript, Three.js/Physijs, MIT LICENSE; last push Aug 25
+2017. README calls it a controllable simple 3D vehicle and collectible tutorial;
+visual mesh and actual driving untested. Teaching reference only; outdated stack,
+minimal features and likely compatibility migration make integration high.
+
+RECOMMENDATION AND COMPATIBILITY
+LIMITED — Best provisional overall starting point for realistic track racing:
+LibreCorsa, because its documented physics, AI and modular ecosystem are much
+closer to the goal than a blank renderer; this is NOT a gameplay or quality
+endorsement until independently tested and its noncommercial assets removed or
+cleared. If DriveX's primary priority is an open city rather than sim racing,
+Overdrive City is a better conceptual city/traffic starting point, but its
+handling and visuals need major replacement. Choose only after hands-on trials.
+LIMITED — Best physics candidate: LibreCorsa based on its documented models
+and validation claims; compare experimentally with Nurburgring Drive and
+Raycast RC Car before adopting. Physics accuracy remains unverified.
+LIMITED — Rendering foundation: Three.js/WebGL is common to most candidates
+and has wide ecosystem potential, but WebGL performance/support here is
+untested. Babylon.js and WebGPU were not comparatively tested.
+LIMITED — Candidate assets: Kenney Car Kit https://kenney.nl/assets/car-kit
+is listed as CC0 on the official asset page; suitable as stylized placeholders,
+not photoreal cars. No pack downloaded or inspected. LibreCorsa credits a CC
+BY 4.0 open-wheel model; confirm original source, license/version, attribution,
+modifications and branding before reuse. No realistic commercial-safe car
+library has been independently verified.
+LIMITED — MIT code from these projects may generally be modified/combined with
+license notices; merge at clearly defined interfaces, not by assuming identical
+coordinate systems, timesteps, input, cameras or engine versions. In particular,
+choose one authoritative vehicle physics simulation and adapt traffic/renderer
+around it; do not run two vehicle solvers together blindly. Separate ODbL,
+CC BY-SA and noncommercial assets and check distribution obligations and
+trademarks. This is not legal advice.
+
+Substantial work remains: evaluate playable baselines and licenses; implement or
+adapt a city, road/terrain streaming and AI; author/clear realistic vehicles,
+interiors and audio; tune handling and cameras; build garage, progression and
+UI; add weather, persistence and optional multiplayer; optimize and test across
+real browsers and hardware. None of the listed projects was imported or modified.
