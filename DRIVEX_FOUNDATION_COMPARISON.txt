@@ -1,0 +1,435 @@
+DRIVEX — OPEN-SOURCE FOUNDATION COMPARISON
+Research date: 2026-11-06. Research and testing only; no DriveX game built.
+Repository: https://github.com/Asif4517-git/DriveX
+
+1. EXECUTIVE SUMMARY — ONE RECOMMENDATION
+
+Recommend OPTION B: LibreCorsa (https://github.com/KhazP/librecorsa) as the
+provisional main CODE foundation, subject to a browser/hardware go/no-go test
+and removal or clearance of incompatible assets. It has the strongest
+inspected combination of 3D car rigging, per-wheel simulation, circuit
+physics, race systems and a static browser build. It is NOT already an
+open-world game and is NOT proven playable on the target PC. Starting from it
+still requires a substantial open-world and road-vehicle expansion.
+
+For open-world design, study Overdrive City's tile/collision/lane/traffic
+code, not its arcade vehicle solver. For race organization and garage/save
+patterns, study CarRace selectively. Integrating any of these is future work,
+not performed here. The common engine alone does not make modules compatible.
+
+No inspected project satisfies the entire vision today. No interactive game,
+3D rendering, user steering, camera, collision, completed player race or FPS
+was verified in this environment. Build and headless test success is narrower
+than browser gameplay. Recommendation is conditional, not a claim that the
+game is playable or commercially cleared.
+
+2. METHOD, REPRODUCIBILITY AND TEST LEVELS
+
+GitHub/web search covered browser driving, racing, Three.js, Babylon.js,
+physics, traffic and licenses; six serious candidates were cloned separately
+under /tmp/drivex-audit, outside DriveX. Tests used Node 22.22.3 and npm
+10.9.8 on Linux, not the requested Windows i3-10100 / GT 710 / 16 GB PC.
+Interactive browser executable/control was unavailable; no GPU device was
+exposed. No browser runtime logs or real performance measurements were taken.
+Network shell access was limited to approved GitHub/npm hosts. Changes, caches,
+node_modules and builds stayed in temporary directories; no candidate files
+were copied into DriveX.
+
+Exact inspected revisions:
+LibreCorsa: 361c12bc249fb5bbab9f286e1666257e8e9aa2ea
+Overdrive City: 288fc54a5bb163f4945617639987c0a2dea59e59
+CarRace: 8cc3f2b7dee27e13b848fc48afd73acb6ab58e19
+Nurburgring Drive: 19f68235ef6ac370fdb7e2930bfb1a07a27e481e
+Raycast RC Car: f9d2457e94c18f71a8eca5884c68d943b6f1e9e5
+Racing Games: e22de885f0f7f305655d148738e033fad345e5a1
+Use https://github.com/<owner>/<repo>/tree/<revision> to inspect these snapshots.
+
+Tests below distinguish source, installation, build, server, browser and play.
+Dependency installs used --ignore-scripts and temporary package caches; this
+reduces install-time execution but can differ from the normal install.
+
+- LibreCorsa: inspected package-lock: Next 16.4.2, React 19.3.1, Three
+  0.187.0, TypeScript 7.0.2. npm ci succeeded (108 packages). Production
+  NEXT_PUBLIC_BASE_PATH=/DriveX npm run build succeeded with static export;
+  TypeScript check succeeded. npm run verify ran beyond the 300-second command
+  limit; 17 individual suites had reported success, including f12026-car,
+  GT3, AI tuning and race control, with no failure reported at interruption.
+  The complete verify suite did NOT finish and was stopped; no full-suite
+  pass claimed. Static output served HTTP 200 at / on loopback, not a tested
+  /DriveX deployment. The production workflow currently deploys to Cloudflare;
+  its GitHub Pages job is only a redirect, not proof that the game is deployed
+  on Pages.
+- Overdrive City: static vendored Three r160; no install/build required.
+  node --test test/city.test.mjs: 6/6 pass, including connected roads and
+  deterministic seed. Static local HTTP GET / returned 200. No browser test.
+- CarRace: npm ci succeeded (1 package; Three 0.170.0). npm test: 350/350
+  Node tests passed. Static local HTTP GET / returned 200. No production
+  build script; not applicable, not a passed build. No browser test.
+- Nurburgring Drive: npm ci succeeded (137 packages; Three 0.165.0, Vite
+  8.0.16); Vite production build succeeded. node tests/verify_launch.mjs
+  printed 0–100 km/h 4.70 s and six simulated laps; this is a scripted
+  headless model scenario, not real-world validation or player gameplay.
+  Static built output GET / returned 200. Install warned about deprecated tar
+  and glob; no security audit or remediation was performed.
+- Raycast RC Car: npm ci succeeded (20 packages; Three 0.185.1, cannon-es
+  0.20.0, Vite 8.1.3); production build succeeded with >500 kB chunk warning.
+  Vite development server started and GET / returned 200; built static output
+  also returned 200. No automated suite was run; no browser test.
+- Racing Games: pnpm 11.17.0 frozen install succeeded (55 packages; Three
+  0.185.1, cannon-es 0.20.0, Vite 8.2.1, Vitest 4.1.10); build and typecheck
+  succeeded; 60/60 Vitest tests passed across 9 files. These include scripted
+  forward motion, steering, wheel contact, track and barrier checks. Static
+  output GET / returned 200. Build warned advancedChunks is deprecated. No
+  interactive browser test.
+
+HTTP 200 was tested on local loopback using Python static servers, not HTTPS,
+GitHub Pages, asset requests, GPU rendering or playable controls. The RC Vite
+server was additionally launched on loopback. No project was deployed.
+
+3. SOURCE-CODE FINDINGS AND MODE COMPATIBILITY
+
+The source statements below are inspection evidence, not proof of visual quality
+or that controls work in an interactive browser. Full inspection of every file
+was not possible. Lack of a discovered feature is not proof of absolute absence.
+
+A. LIBRECORSA — circuit-first, best foundation
+https://github.com/KhazP/librecorsa | Demo https://librecorsa.org/
+MIT code; last push 2026-11-06. TypeScript/Next.js/React/Three WebGL2.
+- src/lib/sim/f12026-car/VehiclePhysics.ts implements a 3D rigid-body model,
+  four wheel/contact states, steering, braking, suspension, tire slip,
+  drivetrain and fixed steps; the source describes 500 Hz outer and 4 x 2 kHz
+  substeps. TrackColliderQuery.ts makes vertical ground queries against tagged
+  track triangles indexed in an XZ grid; sample-ground fallback also exists.
+  This is code-level evidence of a real vehicle solver, not independent proof
+  of realism. LibreCorsa has multiple car implementations: choose/adapt ONE
+  vehicle solver for DriveX rather than treating all of them as one system.
+- src/lib/ported-car-model.ts loads glTF via createGltfLoader and maps named
+  WHEEL_* and STEER nodes with per-wheel pivots; car rig is real mesh geometry,
+  not an image or decorative-only asset. Actual rig behavior unplayed.
+- F12026CarSim.ts implements sectors/lap counts; ai-opponents.ts has an
+  opponent field with steering/throttle/brake and race clock. Lap recorder and
+  ghost-store exist; localStorage, IndexedDB and vehicle setup paths are in
+  source. README describes practice, time trial, AI racing, weather, multiple
+  circuits and P2P, but qualification/championship coverage was not proven.
+- Track-specific height/track progress, surface and barriers need adapters for
+  streamed cities, arbitrary junctions, bridges, ground layers, parked cars and
+  traffic. GroundQuery is a useful seam, not a ready-made open-world engine.
+  The city must supply road/terrain contact, obstacle collision and AI lanes;
+  its vehicle data must support road cars and all modes. Share one rig schema,
+  input, garage, audio, camera and save service between scenes; refactor them
+  out of simulator-specific UI where necessary. Rally needs loose surfaces and
+  terrain; drag requires staging, timing, manual shifting and dedicated tuning.
+
+B. OVERDRIVE CITY — strongest inspected open-world architecture
+https://github.com/appleweiping/overdrive-city
+Demo https://appleweiping.github.io/overdrive-city/ | MIT; pushed 2026-10-23.
+JavaScript/Three r160. main.js creates WebGLRenderer, city and Traffic.
+city.js uses one seeded tile map for geometry, collisions and lanes; config.js
+sets 96 x 96 tiles at 8 m = 768 m square. It is a small explorable city, NOT
+a Kerala-scale streaming world. traffic.js spawns/despawns cars, selects turns
+and probes for cars/pedestrians. peds.js and daynight.js exist; source inspection
+confirmed the day/night directional light and traffic implementation, not all
+pedestrian behavior. README says no traffic lights; roads are right-hand traffic,
+so a Kerala left-hand road model needs reworking.
+vehicle.js uses box/cylinder procedural car meshes and an arcade forward/lateral
+velocity model, not independently simulated wheels or realistic suspension.
+It provides car/wall collision logic, but is not the desired car model or solver.
+citymesh.js uses instancing for buildings, road markings, lamps and trees; its
+comment estimates ~10 city draw calls, not a measurement. A single fixed map
+and global instances are not streaming. localStorage holds best-run score and
+mute, not a full save/garage. Track racing, checkpoints, race AI, improved
+vehicle physics/rigs and road types would need major new work. Some traffic
+logic could be adapted to an abstract road graph, with vehicle control commands
+sent to the chosen solver; cannot be dropped into LibreCorsa unchanged.
+
+C. CARRACE — compact racing/game-flow reference
+https://github.com/alexander-uspenskiy/CarRace
+Demo https://alexander-uspenskiy.github.io/CarRace/ | MIT; pushed 2026-10-15.
+JavaScript/Three WebGL; src/sim/carPhysics.js explicitly implements a 120 Hz
+2-axle bicycle model, not a fully independent 3D suspension solver. carStep.js
+samples track-relative wheel surfaces; render/carModel.js builds a geometric 3D
+Formula car with wheels and MeshStandardMaterial, not a high-fidelity imported
+road car. raceDirector.js handles phase, lap crossings and finishes; AI code,
+garage screen, upgrades and a versioned save store are present. Unit tests pass,
+but browser experience was not verified. Imported car rigs, open-world terrain,
+realistic full vehicle physics, and city traffic need major changes. Good race
+state machine/save design candidate, not the authoritative vehicle solver.
+
+D. NURBURGRING DRIVE — track-focused physics alternative
+https://github.com/esc5221/drive-game | Demo https://drive-game.pages.dev/
+Code MIT; pushed 2026-07-10. JavaScript, Three, Vite. js/physics.js constructs
+six-degree-of-freedom vehicle state with four wheel records, 240 Hz stepping,
+suspension, combined-slip tire curve, engine, manual/auto shifts and surface
+weather grip. js/car.js uses GLTFLoader/DRACO and splits or positions wheel
+meshes. js/main.js connects track, physics, camera, settings and ghost; code
+and headless launch harness demonstrate vehicle calculation, not actual browser
+driveability. Physics depends directly on Track queries, track distance and
+wall assumptions; a general city ground/collision interface and traffic system
+would be necessary. Track/ghost foundation is useful; AI race and championship
+coverage unverified. Mixed licenses and real brand usage make assets risky.
+
+E. RAYCAST RC CAR — small vehicle component/reference
+https://github.com/icurtis1/raycast-vehicle
+Demo https://raycast-rc-car.netlify.app/ | MIT; pushed 2026-07-06.
+JavaScript, Three and cannon-es. src/Vehicle.js creates a CANNON.Body chassis,
+corner spheres and RaycastVehicle with four suspension ray wheels; controls
+call setSteeringValue, applyEngineForce and setBrake. GLB body and four wheels
+are loaded separately. World.js loads a level GLB and creates static trimesh
+colliders. This is a physics-linked 3D visual, not just an image, but physics is
+explicitly arcade and visuals/controls were not browser-tested. No city/race
+architecture was established. Add streaming, traffic, road cars, tracks, race
+rules and improved powertrain. Assets' provenance not established: do not copy.
+
+F. RACING GAMES — tested lightweight procedural circuit prototype
+https://github.com/monon98/racing-games
+Demo https://monon98.github.io/racing-games/ | MIT; pushed 2026-11-04.
+TypeScript/Vite/Three/cannon-es. src/physics/vehicle.ts creates a rigid chassis
+and RaycastVehicle; actual setSteeringValue, applyEngineForce, setBrake and
+wheel-transform calls inspected. Tests exercise contact, forward motion and
+steering headlessly. createCar.ts uses primitive box/cylinder 3D meshes, not
+realistic cars. track/generator.ts and game/lapProgress.ts provide track/lap
+logic; storage uses IndexedDB and localStorage. GLB import/export concerns
+tracks, not proof of a completed imported-car pipeline. No city/traffic or
+opponent AI verified. Both open-world and realistic vehicles require major work;
+stronger candidate for a small circuit prototype than the full vision.
+
+4. ADDITIONAL DISCOVERY / EXCLUSIONS
+
+- TanakritEuro/racing-game https://github.com/TanakritEuro/racing-game claims
+  Rapier racing, manual shifting, championships and editable circuits, but no
+  LICENSE file was found through GitHub API on the inspected default branch.
+  Public source is not permission to reuse; exclude until explicit license.
+- karthikeyan-kesavan/browser-racing claims a vast world, but no license file
+  was identified. Exclude pending author clarification; claims untested.
+- Babylon demo https://github.com/manuelhintermayr/babylon-js-car-example has
+  MIT own code, but THIRD_PARTY_NOTICES.md says its Playground snippet has no
+  separately stated license, Havok has its own terms and the Ford model is not
+  under the code license. No explicit reusable grant for model was established.
+  Interesting engine comparison, not a clean foundation without clarification.
+- https://github.com/swift502/Sketchbook is MIT but archived, old TypeScript/
+  Three/Cannon playground and not a complete racer. The following initial
+  candidates are weaker first choices and were not deeply inspected or run:
+  https://github.com/evildevill/car-game (README calls it a lane-based arcade
+  traffic game); https://github.com/rsamwilson2323-cloud/rpg-car-game (WebGPU
+  dependent per README; suitable WebGL fallback not established);
+  https://github.com/juwalbose/ThreeJS_SimpleCarPhysics (2017 tutorial and
+  obsolete stack). Check licenses and assets again before any future use.
+- https://github.com/szabolevi98/racing describes a Node/WebSocket server and
+  AGPL-3.0 code: network-source obligations and server dependency make it a
+  poor direct fit for static/offline single-player. Desktop-only Vulkan/GPL
+  https://github.com/JesusRB05/Car-simulator is not a direct browser base.
+These discovery descriptions rely on upstream information, not hands-on tests.
+
+5. BROWSER, DEPLOYMENT AND HARDWARE
+
+All six shortlisted projects target web technology in their inspected source;
+none was independently rendered or played in a browser. Required WebGL2
+availability on the actual GT 710, driver/Chrome/Edge combination is UNVERIFIED;
+GPU variants and driver support differ. WebGPU must be optional with a genuine
+WebGL fallback, not a requirement. All candidates require further HTTPS, keyboard,
+controller, loading, save and runtime validation. Source contains keyboard
+handling, but no key input was exercised interactively. Do not equate localhost
+HTTP with real deployment or functional game.
+
+Pages readiness — NOT deployed/tested:
+- LibreCorsa next.config.ts uses output: export and configurable basePath /
+  assetPrefix; build with /DriveX succeeded. Current official workflow deploys
+  to Cloudflare and uses GitHub Pages for a redirect. Asset paths, service
+  worker, routing, all files and optional online services need real subpath
+  testing; optional leaderboard/signaling should not be required for solo play.
+- Racing Games vite.config.ts uses relative base locally and repository base
+  in GitHub Actions; .github/workflows/deploy.yml uploads dist to Pages.
+  Production build tested without GITHUB_REPOSITORY; actual Pages unverified.
+- Nurburgring Drive Vite config uses base './'; CarRace and Overdrive City use
+  static files; RC defaults need subdirectory asset-path verification. Relative
+  assets and import maps alone do not establish successful Pages deployment.
+- LibreCorsa uncompressed output measured 355 MiB (du), public 351 MiB; two
+  raw track files were about 26.7 MB and 26.3 MB. The upstream Cloudflare job
+  compresses assets and moves files over 25 MiB to R2; those steps were not
+  run. GitHub Pages hosting limits, deployment artifact limits, bandwidth and
+  every asset's runtime path must be reviewed before selecting packaging. Do
+  not mistake total build size for a single initial download.
+
+Performance: no FPS, draw-call capture, polygon counts, texture VRAM or memory
+profiles measured. The target GT 710 may struggle with high resolution, heavy
+shadows, reflections, postprocessing and many cars; do not promise a frame rate.
+Source evidence: City uses InstancedMesh and 2048 shadow map, RC desktop shadow
+map 4096 and ~7 MB body plus four ~3.3–3.5 MB wheel GLBs in build output;
+Racing Games tests assert instanced barriers/environment; LibreCorsa has
+scenery LOD/instances, asset compression scripts, shadow and reflection code
+and a high-frequency physics budget. These are architecture clues, not proof of
+adequate speed. Chunked LOD/instancing plus per-cell frustum/occlusion culling,
+texture downscaling/compression, capped device pixel ratio, shadow and
+reflection presets, AI budgets, worker scheduling and streamed cells are a
+plausible optimization path, not implemented or validated. Measure CPU and GPU
+frame times, draw calls, triangles, texture memory, download size, shader time,
+load and peak memory on the specified PC before setting numeric budgets.
+
+6. LICENSE AND ASSET DUE DILIGENCE
+
+Not legal advice. MIT permits code modification and commercial redistribution
+with copyright/license notice, but does not clear separately owned assets,
+third-party code, logos or trademarks. Audit each actual file and dependency,
+record author, URL, license/version, modifications and attribution, and get
+legal review before distribution. Do not use ambiguous or restricted content.
+- LibreCorsa LICENSE and CREDITS.md: code MIT; Three MIT; fonts OFL; credits
+  say FA-26 and several circuit scans CC BY 4.0 (attribution required); AMG
+  and BMW GT3 models CC BY-NC-SA 4.0 (noncommercial and share-alike); many
+  Assetto Corsa mod sounds have their authors' terms/unknown authors and are
+  stated noncommercial. Synthesized fallback samples are project's own MIT
+  according to credits. Do not reuse NC models or mod sounds for a commercial
+  DriveX. Even CC BY models of real cars may raise branding/design issues.
+- Nurburgring Drive LICENSE: code MIT; OSM-derived track data ODbL 1.0 with
+  attribution and database share-alike obligations depending on use; Porsche
+  GLB CC BY-SA 4.0, Hyundai GLB CC BY-NC 4.0 per README. Noncommercial fan
+  project and real marks. Textures/other models must be checked individually.
+  Engine sound generator is credited MIT; fonts OFL/Apache per README.
+- Overdrive City: LICENSE MIT; vendored Three header MIT; README says code,
+  art and sound original/procedural. No complete independent provenance audit;
+  per-file textures/fonts/audio still require review before shipping.
+- CarRace: LICENSE MIT and vendored Three MIT per README. Car geometry and
+  sounds generated in code, but team names/liveries can implicate trademarks.
+  Confirm all fonts, textures and third-party notices; do not assume all MIT.
+- Raycast RC: code MIT; cannon-es and Three are MIT upstream. Separate GLBs
+  and reflection texture are present; README does not establish clear
+  individual source/license in the inspected lines. Treat as UNVERIFIED and
+  replace/clear rather than infer that MIT code automatically licenses them.
+- Racing Games: code MIT; Three/cannon-es MIT upstream; inspected source makes
+  procedural car and audio. Check all imported/user-provided GLBs and textures
+  separately. Do not assume exported/imported user data is licensed.
+- Low-poly placeholder candidate: https://kenney.nl/assets/car-kit official
+  page lists CC0. It is not a verified realistic car; inspect original pack and
+  terms before use. No suitable realistic, fully cleared vehicle library was
+  established. Kerala OSM-derived data would need ODbL attribution/database
+  assessment; use a provenance ledger, not an assumed blanket license.
+
+7. WEIGHTED TECHNICAL COMPARISON — SOURCE-LEVEL, NOT PLAYABILITY SCORES
+
+Requested weights: Physics 15%, Open world 15%, Track 15%, Browser 15%,
+Graphics architecture 10%, Car integration 10%, AI 5%, Performance 5%,
+Maintainability 5%, GitHub Pages 5%. Numeric scores are subjective SOURCE
+maturity/fit (1 weak, 10 strong), based on findings and tests above, not
+measured quality. U = UNVERIFIED; browser runtime, actual performance and Pages
+deployment were not verified and are U for all. A missing capability receives a
+low score only when the inspected design is demonstrably limited, not a claim
+that every file was searched. Do not interpret these as gameplay ratings.
+
+Project          Phys World Track Browser Graph Cars AI Perf Maint Pages
+LibreCorsa         9     2     9    U       8    9   8   U     7    U
+Overdrive City     2     6     1    U       4    2   6   U     7    U
+CarRace            5     1     8    U       6    3   8   U     8    U
+Nurburgring Drive  8     2     6    U       7    9   2   U     6    U
+Raycast RC         6     1     1    U       6    8   1   U     6    U
+Racing Games       6     1     5    U       5    2   1   U     7    U
+
+Explanation per row in table order (U applies to browser/performance/Pages):
+LibreCorsa 9: per-wheel/ground/gear code plus selected headless suites, not
+real-world certified. 2: track-oriented query, no city streaming established.
+9: timing, AI, multiple track structure. 8: WebGL/rig, LOD and instancing.
+9: loaded GLB with named rig and wheel pivots; licenses restrict assets.
+8: opponent field and race code. 7: modular TS, static build and test suite,
+but complexity, incomplete full verify and asset obligations lower confidence.
+City 2: arcade velocity. 6: lane map, connected city and traffic, but small
+fixed grid, no streaming. 1: no circuit system established. 4: simple 3D
+instancing, limited visual detail. 2: primitive cars/no inspected import rig.
+6: lane traffic/pedestrian probes, not racing AI. 7: modular static JS and
+six passing deterministic tests; old vendored Three and limited tests.
+CarRace 5: bicycle model and tested calculations, not full 3D wheel physics.
+1: track-bound code. 8: raceDirector, AI and 350 tests. 6: 3D procedural
+car/materials and separate renderer. 3: no imported road-car rig found.
+8: race AI source; no ambient traffic established. 8: modular code/tests.
+Ring 8: 6DOF/four-wheel/gear source plus scripted launch. 2: track interface,
+no city verified. 6: track/ghost/lap structure and headless laps, AI races
+unverified. 7: glTF and 3D renderer, quality unknown. 9: GLB wheel rigging.
+2: no general traffic or opponent race implementation confirmed. 6: split
+modules/build with track coupling and mixed-asset obligations.
+RC 6: four raycast wheels and controls, arcade model. 1: single GLB level.
+1: no lap/race architecture established. 6: GLB loader, lighting/reflection.
+8: body/wheel GLBs tied to vehicle rig. 1: no AI established. 6: compact
+module split/build; no executed automated suite and unclear asset provenance.
+Racing Games 6: four raycast wheels and passing headless motion tests. 1: track
+prototype, no city established. 5: generated circuits/lap rules, no race AI
+proven. 5: procedural meshes/lighting and instanced barriers. 2: primitive car,
+GLB handling applies to tracks. 1: no traffic/opponents established. 7:
+modular TypeScript, 60 passing tests/build, with build deprecation warning.
+
+The scored weights cover 75% of the requested total, so a FULL weighted score
+or definitive ranking cannot be calculated honestly. For transparency only,
+weighted contributions out of the maximum available 7.50 points are:
+LibreCorsa 5.45; City 2.60; CarRace 3.80; Ring 4.40; RC 2.95; Racing 2.90.
+These are NOT totals out of 10 and do not impute scores for the missing 25%.
+The recommendation is a reasoned preliminary choice, not a measured ranking.
+
+8. ARCHITECTURE OPTIONS AND WORK REMAINING
+
+A. One project unchanged: least initial integration, but no candidate provides
+Kerala-scale world AND proper racing AND cleared assets. LibreCorsa alone needs
+a large city, traffic and road-car systems; City alone needs a new vehicle solver
+and race framework. High extension cost either way.
+B. LibreCorsa code base plus selective systems (recommended): preserve/adapt one
+chosen LibreCorsa vehicle solver and its rig/track race systems. Study/adapt
+City's MIT tile/lane graph, spawn logic and instanced scenery, replacing its
+vehicle.js physics with a controller that sends throttle/steer/brake inputs to
+the one chosen simulation. Study CarRace's MIT race flow and versioned save,
+not its bicycle solver. Both City and CarRace use Three but versions, axes,
+units, track data, entity lifecycles and timing differ. Refactor through stable
+interfaces rather than copying wholesale. Do not reuse their assets or marks
+without separate clearance. Moderate-to-high integration work and testing.
+C. Lightweight custom shell plus selected libraries/components: cleaner APIs
+and potentially leaner low-end performance; highest upfront implementation and
+revalidation effort. Three and cannon-es are MIT, but replacing LibreCorsa's
+solver with cannon-es trades realism work for simpler integration. Do not run
+both on the same player car. Reconsider C if LibreCorsa cannot meet the target.
+
+Suggested boundaries for B: mode/session manager chooses open-world/track/
+rally/drag scene; shared VehicleDefinition and rig + one fixed-step physics
+system consume normalized controls and a world contact query; track and streamed
+city each implement surface and obstacle queries. Render interpolated state;
+AI produces the same controls; shared garage/save/audio/camera services consume
+vehicle state. A city traffic graph needs left-hand lanes, intersections,
+signals, obstacle and pedestrian rules; track mode needs AI lines, checkpoint/
+laps and race lifecycle. Add broadphase and chunk lifetime handling for large
+maps, coordinate precision, crossings/bridges and collisions across chunks.
+This is a proposed architecture, not code tested or implemented.
+
+A realistic first vertical slice is one license-cleared rigged car, one small
+Kerala-inspired road area with a few traffic agents and one simple circuit,
+shared controls/physics/camera/save, hosted as a static HTTPS site. It still
+needs original or properly licensed car/world/audio, track/city integration,
+quality settings, correctness tests and target-PC browser testing. Rough order
+of magnitude: several weeks to a few months for a small experienced team,
+depending on asset availability and performance; no schedule guarantee. The
+complete vision (large world, varied cars, weather, rally, drag, championships,
+multiplayer and polished realism) is a much larger multi-person effort.
+
+9. DIRECT ANSWERS / RISKS
+
+1 Best overall: LibreCorsa, provisionally and for CODE, gated by real gameplay,
+  GT 710 performance and a clean asset replacement plan.
+2 Strongest physics: LibreCorsa, on inspected sophistication and selected
+  headless suites; real-world fidelity and browser control remain unverified.
+3 Strongest open-world architecture: Overdrive City, though its 768 m grid is
+  small and its solver is arcade.
+4 Strongest inspected circuit systems: LibreCorsa; CarRace is a simpler,
+  well-tested race-flow reference. Championships/qualifying not proven.
+5 Best browser compatibility: UNVERIFIED. Racing Games has the clearest
+  inspected Pages workflow; build and HTTP success do not prove compatibility.
+6 One existing project for complete vision: no, substantial engineering needed.
+7 Hybrid: yes, as described in option B; only one authoritative player solver.
+8 Reuse candidates: LibreCorsa code/rig/race; selectively adapt City's lane/
+  traffic ideas and CarRace race-flow/save patterns after licensing review.
+9 Rewrite/extend: world streaming, Kerala road graph and traffic rules, road
+  car data/rigs, city collision adapters, asset pipeline, garage, mode integration
+  and optimization; do not retain City's arcade solver for the player.
+10 Risks: no browser/hardware proof; 500 Hz CPU cost; track assumptions;
+  physics/coordinate incompatibility; GT 710 WebGL2/driver unknown; asset and
+  brand rights, ODbL/share-alike and noncommercial assets; static path/size.
+11 Prototype work: see vertical slice above; significant integration and testing
+  remain. No verified browser-playable DriveX currently exists.
+
+Sources: linked repositories and their revision-specific LICENSE/README/source,
+LibreCorsa CREDITS.md and next.config.ts, Overdrive City src/{city,vehicle,
+traffic,citymesh}.js, CarRace src/sim and src/render, Ring js/{physics,car,
+main}.js, RC src/{Vehicle,World}.js, Racing src/physics and tests. The actual
+browser behavior, full license chain, exact target hardware performance and
+complete LibreCorsa verification remain unverified.
