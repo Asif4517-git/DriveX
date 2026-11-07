@@ -1,0 +1,56 @@
+import { describe, it } from 'vitest';
+import { updateLapProgress } from '../src/game/lapProgress';
+import { respawnDistancePenaltyM } from '../src/game/penalties';
+import { isWrongWay } from '../src/game/wrongWay';
+import { randomPlayerName } from '../src/utils/random';
+import { check } from './helpers';
+
+describe('lap progress', () => {
+  it('detects crossing, mid-lap, and backward movement', () => {
+    const L = 1000;
+    const cross = updateLapProgress(10, 990, L, 800);
+    check('crossed line detected', cross.crossedLine && Math.abs(cross.completedDistance - 820) < 1e-6, JSON.stringify(cross));
+    const mid = updateLapProgress(400, 300, L, 500);
+    check('mid-lap no crossing', !mid.crossedLine && Math.abs(mid.completedDistance - 600) < 1e-6, JSON.stringify(mid));
+    const back = updateLapProgress(300, 400, L, 600);
+    check('backward movement reverses accumulated progress', !back.crossedLine && back.dS < 0 && Math.abs(back.completedDistance - 500) < 1e-6, JSON.stringify(back));
+  });
+  it('cannot gain lap distance by oscillating back and forth', () => {
+    let distance = 0;
+    for (let i = 0; i < 100; i++) {
+      distance = updateLapProgress(110, 100, 1000, distance).completedDistance;
+      distance = updateLapProgress(100, 110, 1000, distance).completedDistance;
+    }
+    check('oscillations net zero', distance === 0, `${distance}`);
+  });
+});
+
+describe('respawn distance penalty', () => {
+  it('uses a 10m floor and takes actual rollback when larger', () => {
+    check('small rollback uses 10m floor', respawnDistancePenaltyM(100, 95) === 10);
+    check('zero/negative rollback uses 10m floor', respawnDistancePenaltyM(100, 105) === 10);
+    check('larger rollback uses actual distance', respawnDistancePenaltyM(100, 63) === 37);
+  });
+});
+
+describe('wrong-way detection', () => {
+  it('requires backward heading plus forward motion; reversing is not wrong-way', () => {
+    const fwd = { x: 0, y: 0, z: 1 };
+    const bwd = { x: 0, y: 0, z: -1 };
+    const tangent = { x: 0, y: 0, z: 1 };
+    check('nose forward driving is not wrong-way', !isWrongWay(fwd, tangent, 5));
+    check('nose forward reversing is not wrong-way', !isWrongWay(fwd, tangent, -5));
+    check('nose backward driving forward is wrong-way', isWrongWay(bwd, tangent, 5));
+    check('nose backward reversing is not wrong-way', !isWrongWay(bwd, tangent, -5));
+    check('nose backward too slow is not wrong-way', !isWrongWay(bwd, tangent, 1));
+  });
+});
+
+describe('default player name', () => {
+  it('is Player + 5 random alphanumeric chars', () => {
+    for (let i = 0; i < 20; i++) {
+      const name = randomPlayerName();
+      check('player name format', /^Player[A-Z0-9]{5}$/.test(name), name);
+    }
+  });
+});

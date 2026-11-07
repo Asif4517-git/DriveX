@@ -1,0 +1,372 @@
+import { describe, it } from 'vitest';
+import * as CANNON from 'cannon-es';
+import * as THREE from 'three';
+import { BARRIER_COLLIDER_GROUP_SIZE, CAR } from '../src/config';
+import { buildTrack, findSafeSpawnIndex, generateCenterlinePoints, loopSelfIntersects } from '../src/track/generator';
+import { PRESET_TRACKS } from '../src/track/presets';
+import { buildTrackForMode, check, createCarRig, makeMeta } from './helpers';
+
+function maxHeadingTurn(points: { x: number; z: number }[], tangents: { x: number; z: number }[]): number {
+  let maxTurn = 0;
+  for (let i = 0; i < points.length; i++) {
+    const j = (i + 1) % points.length;
+    const h0 = Math.atan2(tangents[i].x, tangents[i].z);
+    const h1 = Math.atan2(tangents[j].x, tangents[j].z);
+    let dh = h1 - h0;
+    while (dh > Math.PI) dh -= Math.PI * 2;
+    while (dh < -Math.PI) dh += Math.PI * 2;
+    maxTurn = Math.max(maxTurn, Math.abs(dh));
+  }
+  return maxTurn;
+}
+
+describe('preset tracks', () => {
+  it('registry: stable unique ids/names, first entry is the default', () => {
+    const ids = PRESET_TRACKS.map((p) => p.id);
+    check('>=3 presets', PRESET_TRACKS.length >= 3, String(PRESET_TRACKS.length));
+    check('ids unique', new Set(ids).size === ids.length, ids.join(','));
+    check('names unique', new Set(PRESET_TRACKS.map((p) => p.name)).size === PRESET_TRACKS.length);
+    check('mature preset first (default fallback)', PRESET_TRACKS[0].id === 'aurora-ring');
+    for (const p of PRESET_TRACKS) {
+      check(`${p.id}: seed set`, Number.isInteger(p.seed) && p.seed > 0);
+      check(`${p.id}: length plausible`, p.length >= 400 && p.length <= 2600, String(p.length));
+      check(`${p.id}: controls enough`, p.controls.length >= 6, String(p.controls.length));
+    }
+  });
+
+  it.each(PRESET_TRACKS.map((p) => [p.id, p] as const))('%s: deterministic build, smooth, clear of itself, drivable', (_id, preset) => {
+    // 游戏同路径：preset 元数据 → generatePresetTrack（缩放到目标长度 + 自交守卫）
+    const built = buildTrackForMode('preset', 0, preset.id);
+    const pts = built.points;
+    check(
+      `${preset.id}: total = target length`,
+      Math.abs(built.totalLength - preset.length) < 1,
+      `${built.totalLength.toFixed(1)} vs ${preset.length}`,
+    );
+    check(`${preset.id}: no self-intersection`, !loopSelfIntersects(pts));
+    // 相邻采样方向变化小（1.2m 采样下发卡也 <0.08rad/步，实测上限 0.079）
+    let maxTurn = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const j = (i + 1) % pts.length;
+      const h0 = Math.atan2(built.tangents[i].x, built.tangents[i].z);
+      const h1 = Math.atan2(built.tangents[j].x, built.tangents[j].z);
+      let dh = h1 - h0;
+      while (dh > Math.PI) dh -= Math.PI * 2;
+      while (dh < -Math.PI) dh += Math.PI * 2;
+      maxTurn = Math.max(maxTurn, Math.abs(dh));
+    }
+    check(`${preset.id}: smooth per-step heading`, maxTurn < 0.25, `maxTurn=${maxTurn.toFixed(3)}rad`);
+    // 远距离最近间距要放得下两条路（含弯道加宽）：实测最窄 32m，阈值 25 留裕度；
+    // 圆周方向 60 采样（72m 弧长）内不算——那是同一条路的相邻点
+    let minClear = Infinity;
+    const arcGap = 60;
+    for (let i = 0; i < pts.length; i++) {
+      for (let j = i + arcGap; j < pts.length; j++) {
+        const dj = j - i;
+        if (Math.min(dj, pts.length - dj) < arcGap) continue;
+        const d = Math.hypot(pts[i].x - pts[j].x, pts[i].z - pts[j].z);
+        minClear = Math.min(minClear, d);
+      }
+    }
+    check(
+      `${preset.id}: parallel passes clear road+widening`,
+      minClear > 25,
+      `minClear=${minClear.toFixed(1)}m`,
+    );
+    // 确定性：同预设两次构建位图一致（布局永不随版本漂移）
+    const again = buildTrackForMode('preset', 0, preset.id);
+    const j0 = pts.slice(0, 30).map((p) => `${p.x.toFixed(6)},${p.z.toFixed(6)}`).join('|');
+    const j1 = again.points.slice(0, 30).map((p) => `${p.x.toFixed(6)},${p.z.toFixed(6)}`).join('|');
+    check(`${preset.id}: deterministic`, j0 === j1);
+    // 可驾驶冒烟：静止 30 帧后 ≥3 轮接地（不在空中挂死/不陷地）
+    const rig = createCarRig(built);
+    for (let i = 0; i < 30; i++) rig.physics.update({ throttle: 0, brake: 0, steering: 0 }, 1 / 60);
+    const contacts = rig.physics.debugWheelStates().filter((w) => w.isInContact).length;
+    check(`${preset.id}: car settles on ground`, contacts >= 3, `contacts=${contacts}`);
+    rig.physics.dispose();
+  });
+});
+
+describe('track generation', () => {
+  it('simple track: smooth, self-intersection free, correctly sized', () => {
+    const built = buildTrackForMode('simple');
+    const points = built.points;
+    check('centerline length 1200~2400', points.length > 1200 && points.length < 2400, String(points.length));
+    check('wheelRadius = 0.4', CAR.wheelRadius === 0.4, String(CAR.wheelRadius));
+    check('roadWidth = 12.0', Math.abs(built.roadWidth - 12.0) < 1e-6, String(built.roadWidth));
+    check(
+      'curves wider than base',
+      Math.max(...built.halfWidths) > built.roadWidth / 2 + 0.5,
+      `max halfWidth=${Math.max(...built.halfWidths).toFixed(2)}m base=${(built.roadWidth / 2).toFixed(2)}m`,
+    );
+    check('barrierHeight = 1.8', Math.abs(built.barrierHeight - 1.8) < 1e-6, String(built.barrierHeight));
+    check('totalLength in [1500, 2700]', built.totalLength > 1500 && built.totalLength < 2700, String(built.totalLength.toFixed(0)));
+    // 新规则：不要求直线，但不能突左突右（相邻采样方向变化小）、不自交
+    check('simple no zigzag', maxHeadingTurn(points, built.tangents) < 0.3, `max turn=${maxHeadingTurn(points, built.tangents).toFixed(3)}rad`);
+    check('simple no self-intersection', !loopSelfIntersects(built.points));
+    check('simple has no terrain', built.terrain === null);
+    const roadAttr = (built.group.getObjectByName('road') as import('three').Mesh)?.geometry.getAttribute('position');
+    check('road mesh has positions', !!roadAttr && roadAttr.count === points.length * 2, `count=${roadAttr?.count}`);
+  });
+
+  it('complex track: real terrain, drivable slopes, road follows terrain', () => {
+    const built = buildTrackForMode('complex');
+    const points = built.points;
+    const ys = points.map((p) => p.y);
+    check('complex elevation range', Math.max(...ys) - Math.min(...ys) > 2, `range=${(Math.max(...ys) - Math.min(...ys)).toFixed(1)}m`);
+
+    // 坡度可行驶：相邻采样点最大坡度 ≤ 13%，且无断崖（|Δh| ≤ 0.5m）
+    let maxSlope = 0;
+    let noCliff = true;
+    for (let i = 0; i < points.length; i++) {
+      const j = (i + 1) % points.length;
+      const dh = Math.abs(points[i].y - points[j].y);
+      if (dh > 0.5) noCliff = false;
+      const ds = points[i].distanceTo(points[j]);
+      maxSlope = Math.max(maxSlope, dh / Math.max(0.01, ds));
+    }
+    check('complex drivable slopes', maxSlope < 0.13, `max slope=${(maxSlope * 100).toFixed(1)}%`);
+    check('complex no cliffs', noCliff);
+    check('complex has terrain heightfield', !!built.terrain);
+
+    if (built.terrain) {
+      const terrainYs = built.terrain.heights.flat();
+      check(
+        'terrain elevation range',
+        Math.max(...terrainYs) - Math.min(...terrainYs) > 2,
+        `terrain range=${(Math.max(...terrainYs) - Math.min(...terrainYs)).toFixed(1)}m`,
+      );
+      // 轨道贴地形：采样点高度与地形采样一致（最终坡度钳制只允许小偏差）
+      let maxDev = 0;
+      for (let i = 0; i < points.length; i += 40) {
+        const p = points[i];
+        maxDev = Math.max(maxDev, Math.abs(p.y - built.terrain.sample(p.x, p.z)));
+      }
+      check('track follows terrain', maxDev < 1.0, `maxDev=${maxDev.toFixed(2)}m`);
+      // 轮距处左右等高（轮胎接地）：侧坡过大时刚性车身 + 有限悬架会让单侧轮胎离地，
+      // 导致坡上失去驱动力、后溜翻车；地形走廊找平后应保持左右一致
+      let maxWheelDiff = 0;
+      for (let i = 0; i < points.length; i += 3) {
+        const p = points[i];
+        const t = built.tangents[i];
+        const right = new THREE.Vector3(t.z, 0, -t.x).normalize();
+        const l = built.terrain.sample(p.x - right.x * 1.15, p.z - right.z * 1.15);
+        const r = built.terrain.sample(p.x + right.x * 1.15, p.z + right.z * 1.15);
+        maxWheelDiff = Math.max(maxWheelDiff, Math.abs(l - r));
+      }
+      check('wheel track is level on slopes', maxWheelDiff < 0.15, `max=${maxWheelDiff.toFixed(3)}m`);
+      const groundMesh = built.group.getObjectByName('ground') as import('three').Mesh;
+      const attr = groundMesh?.geometry.getAttribute('position');
+      if (attr) {
+        let minY = Infinity;
+        let maxY = -Infinity;
+        for (let i = 0; i < attr.count; i++) {
+          const y = attr.getY(i);
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+        }
+        check('ground mesh is real terrain', maxY - minY > 1, `ground range=${(maxY - minY).toFixed(1)}m`);
+      }
+    }
+    const roadAttr = (built.group.getObjectByName('road') as import('three').Mesh)?.geometry.getAttribute('position');
+    check('road mesh has positions', !!roadAttr && roadAttr.count === points.length * 2, `count=${roadAttr?.count}`);
+  });
+
+  it('local preset id derives stably from file name', async () => {
+    const { localPresetIdFor } = await import('../src/track/localPresets');
+    check('plain name', localPresetIdFor('classic.glb') === 'local-classic', localPresetIdFor('classic.glb'));
+    check(
+      'non-ascii/space/punct sanitized',
+      localPresetIdFor('Aurora Ring(GLB).gltf') === 'local-Aurora-Ring-GLB',
+      localPresetIdFor('Aurora Ring(GLB).gltf'),
+    );
+    check('cjk stripped (recommend ascii file names)', localPresetIdFor('环道.glb') === 'local-', localPresetIdFor('环道.glb'));
+  });
+
+  it('preset track: fixed layout, deterministic, buildable from stored centerline', () => {
+    const built = buildTrackForMode('preset', 0, 'aurora-ring');
+    // 重建两次，输出必须完全一致（预设=固定布局）
+    const built2 = buildTrackForMode('preset', 999, 'aurora-ring');
+    check(
+      'preset deterministic',
+      built.points.length === built2.points.length &&
+        built.points.every((p, i) => p.distanceTo(built2.points[i]) < 1e-9),
+      String(built.points.length),
+    );
+    check('preset length close to spec', Math.abs(built.totalLength - 1800) < 30, built.totalLength.toFixed(0));
+    check('preset no self-intersection', !loopSelfIntersects(built.points));
+    check('preset flat (no terrain)', built.terrain === null);
+    check('preset all points on ground plane', built.points.every((p) => Math.abs(p.y) < 1e-9));
+    check('preset roadWidth = 12.0', Math.abs(built.roadWidth - 12.0) < 1e-6, String(built.roadWidth));
+    check('preset has barriers', built.physics.barriers.length > 20, String(built.physics.barriers.length));
+  });
+
+  it('barrier AABBs match their world transforms (static compound bodies)', () => {
+    for (const preset of PRESET_TRACKS) {
+      const built = buildTrackForMode('preset', 42, preset.id);
+      let allContained = true;
+      let aligned = true;
+      let shapeCount = 0;
+      let compoundOk = true;
+      for (const b of built.physics.barriers) {
+        let boxes = 0;
+        for (let s = 0; s < b.shapes.length; s++) {
+          const shape = b.shapes[s];
+          if (shape instanceof CANNON.Plane) continue;
+          const box = shape as CANNON.Box;
+          boxes++;
+          shapeCount++;
+          // shape 的世界位置/朝向 = body 变换 × shapeOffset/shapeOrientation
+          const center = b.quaternion.vmult(b.shapeOffsets[s], new CANNON.Vec3());
+          center.vadd(b.position, center);
+          const worldQuat = b.quaternion.mult(b.shapeOrientations[s], new CANNON.Quaternion());
+          // 静态体 AABB 不会自动刷新：必须覆盖旋转后盒子的 8 个世界角点
+          for (const sx of [-1, 1]) {
+            for (const sy of [-1, 1]) {
+              for (const sz of [-1, 1]) {
+                const local = new CANNON.Vec3(
+                  box.halfExtents.x * sx,
+                  box.halfExtents.y * sy,
+                  box.halfExtents.z * sz,
+                );
+                const world = worldQuat.vmult(local, new CANNON.Vec3());
+                world.vadd(center, world);
+                const bb = b.aabb;
+                if (
+                  world.x < bb.lowerBound.x - 1e-3 ||
+                  world.y < bb.lowerBound.y - 1e-3 ||
+                  world.z < bb.lowerBound.z - 1e-3 ||
+                  world.x > bb.upperBound.x + 1e-3 ||
+                  world.y > bb.upperBound.y + 1e-3 ||
+                  world.z > bb.upperBound.z + 1e-3
+                ) {
+                  allContained = false;
+                }
+              }
+            }
+          }
+        }
+        // compound 每体最多 GROUP_SIZE 段；单段 body 说明合并失效
+        if (boxes > BARRIER_COLLIDER_GROUP_SIZE) compoundOk = false;
+        // AABB 必须围绕 body 位置（构造期 AABB 在原点的问题会在这里暴露）
+        if (
+          b.position.x < b.aabb.lowerBound.x ||
+          b.position.x > b.aabb.upperBound.x ||
+          b.position.z < b.aabb.lowerBound.z ||
+          b.position.z > b.aabb.upperBound.z
+        ) {
+          aligned = false;
+        }
+      }
+      check(`${preset.id}: barrier AABB contains rotated corners`, allContained);
+      check(`${preset.id}: barrier AABB centered on body`, aligned);
+      check(`${preset.id}: compound chunks <= 4 shapes`, compoundOk);
+      check(
+        `${preset.id}: compound shape count matches segment AABBs`,
+        shapeCount === built.barrierAabbs.length,
+        `${shapeCount} vs ${built.barrierAabbs.length}`,
+      );
+      check(
+        `${preset.id}: compound body count reduced`,
+        built.physics.barriers.length <= Math.ceil(built.barrierAabbs.length / BARRIER_COLLIDER_GROUP_SIZE) + 2,
+        `${built.physics.barriers.length} bodies for ${built.barrierAabbs.length} segments`,
+      );
+    }
+  });
+
+  it('spawn points are clear of barriers', () => {
+    for (const mode of ['simple', 'complex', 'preset'] as const) {
+      const built = buildTrackForMode(mode, 42, mode === 'preset' ? 'aurora-ring' : null);
+      let spawnSafe = true;
+      for (let i = 0; i < built.points.length; i += 150) {
+        const safe = findSafeSpawnIndex(built, i);
+        const p = built.points[safe];
+        for (const bb of built.barrierAabbs) {
+          if (
+            p.x > bb.minX - 2.4 &&
+            p.x < bb.maxX + 2.4 &&
+            p.z > bb.minZ - 1.4 &&
+            p.z < bb.maxZ + 1.4
+          ) {
+            spawnSafe = false;
+          }
+        }
+      }
+      check(`respawn points clear of barriers (${mode})`, spawnSafe);
+      check(`has barriers (${mode})`, built.physics.barriers.length > 20, String(built.physics.barriers.length));
+    }
+  });
+
+  it('barriers and environment are batched into InstancedMesh', () => {
+    for (const mode of ['simple', 'complex', 'preset'] as const) {
+      const built = buildTrackForMode(mode, 42, mode === 'preset' ? 'aurora-ring' : null);
+      const barrierBatch = built.group.getObjectByName('barriers');
+      check(
+        `single barrier InstancedMesh (${mode})`,
+        barrierBatch instanceof THREE.InstancedMesh,
+        barrierBatch?.type,
+      );
+      check(
+        `barrier instance count matches segments (${mode})`,
+        (barrierBatch as THREE.InstancedMesh).count === built.barrierAabbs.length,
+        `${(barrierBatch as THREE.InstancedMesh).count} vs ${built.barrierAabbs.length}`,
+      );
+
+      const env = built.group.getObjectByName('environment');
+      let envMeshes = 0;
+      let plainMeshes = 0;
+      env?.traverse((o) => {
+        if (!(o instanceof THREE.Mesh)) return;
+        envMeshes++;
+        if (!(o as THREE.InstancedMesh).isInstancedMesh) plainMeshes++;
+      });
+      check(
+        `environment uses only InstancedMesh (${mode})`,
+        envMeshes > 0 && envMeshes <= 15 && plainMeshes === 0,
+        `${envMeshes} meshes, ${plainMeshes} plain`,
+      );
+    }
+  });
+
+  it('complex multi-seed validity', () => {
+    let validSeeds = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      const built = buildTrackForMode('complex', seed);
+      let ok = built.totalLength > 1500 && built.totalLength < 2700;
+      let maxSlope = 0;
+      for (let i = 0; i < built.points.length; i++) {
+        const j = (i + 1) % built.points.length;
+        const dh = Math.abs(built.points[i].y - built.points[j].y);
+        const ds = built.points[i].distanceTo(built.points[j]);
+        maxSlope = Math.max(maxSlope, dh / Math.max(0.01, ds));
+        if (dh > 0.5) ok = false;
+      }
+      if (maxSlope >= 0.13) ok = false;
+      if (ok) {
+        validSeeds++;
+      } else {
+        console.log(`  seed ${seed} invalid: len=${built.totalLength.toFixed(0)} maxSlope=${(maxSlope * 100).toFixed(1)}%`);
+      }
+    }
+    check('complex multi-seed validity', validSeeds === 6, `valid=${validSeeds}/6`);
+  });
+
+  it('generated centerline matches build input', () => {
+    for (const mode of ['simple', 'complex'] as const) {
+      const meta = makeMeta(mode, 42);
+      const points = generateCenterlinePoints(meta);
+      const built = buildTrack(meta, points);
+      check(`${mode} centerline used as-is`, built.points === points, mode);
+    }
+    // 预设：同样直接使用 generateCenterlinePoints 的输出，且 meta.presetId 无效时回退第一个预设
+    const meta = makeMeta('preset', 42, 'aurora-ring');
+    const presetPoints = generateCenterlinePoints(meta);
+    const fallback = generateCenterlinePoints({ ...meta, presetId: 'no-such-preset' });
+    check(
+      'preset centerline used as-is & fallback to first preset',
+      generateCenterlinePoints(meta).length === presetPoints.length &&
+        fallback.every((p, i) => p.distanceTo(presetPoints[i]) < 1e-9),
+      String(presetPoints.length),
+    );
+  });
+});
