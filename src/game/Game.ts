@@ -1,0 +1,475 @@
+import * as CANNON from 'cannon-es';
+import * as THREE from 'three';
+import { loadBindings } from '../input/bindings';
+import { Transmission, loadTransmissionMode, saveTransmissionMode } from '../physics/transmission';
+import { AudioSystem } from '../audio/engine';
+import { disposeSceneGeometry } from '../render/dispose';
+import { renderQuality } from '../render/quality';
+import { buildCar, type CarVisual } from '../car/createCar';
+import {
+  DISTANCE_PENALTY_SEC_PER_M,
+  FLIP_ANGLE_DEG,
+  FLIP_HOLD_MS,
+  OFFTRACK_HOLD_MS,
+  OFFTRACK_MARGIN,
+  TIME_PENALTY_MS,
+  WRONG_WAY_HOLD_MS,
+} from '../config';
+import { CarPhysics, CHASSIS_SPAWN_HEIGHT, type VehicleInput } from '../physics/vehicle';
+import { SKY_HORIZON, applyColorPipeline, bakeEnvironment, createSkyDome, createSunFollower, type SunFollower } from '../render/lighting';
+import { addLeaderboardEntry } from '../storage/db';
+import { findSafeSpawnIndex, type BuiltTrack } from '../track/generator';
+import { createHUD, type HudRefs } from '../ui/hud';
+import { createMinimapRenderer, createVillageMinimap, type MinimapRenderer } from '../ui/minimap';
+import { worldRecovery } from '../world/village';
+import { updateLapProgress } from './lapProgress';
+import { respawnDistancePenaltyM } from './penalties';
+import { isWrongWay } from './wrongWay';
+
+export interface GameOptions {
+  mode?: 'time-trial' | 'free-roam';
+  playerName: string;
+  carColor: string;
+  onBack: () => void;
+  onRestart: () => void;
+}
+
+export class Game {
+  private readonly container: HTMLElement;
+  private readonly renderer: THREE.WebGLRenderer;
+  private readonly scene = new THREE.Scene();
+  private readonly camera: THREE.PerspectiveCamera;
+  private readonly sunFollower: SunFollower;
+  private readonly sunFocus = new THREE.Vector3();
+  private readonly cameraLook = new THREE.Vector3();
+  private readonly onBlur = () => this.keys.clear();
+  private readonly clock = new THREE.Clock();
+  private readonly track: BuiltTrack;
+  private readonly car: CarVisual;
+  private readonly physics: CarPhysics;
+  private readonly hud: HudRefs;
+  private readonly minimap: MinimapRenderer;
+  private readonly audio = new AudioSystem();
+  private readonly opts: GameOptions;
+
+  private readonly keys = new Set<string>();
+  private readonly bindings = loadBindings();
+  private readonly transmission = new Transmission(loadTransmissionMode());
+  private paused = false;
+  private finished = false;
+  private startTime = performance.now();
+  private pausedAt = 0;
+  private cameraMode = 0;
+  private cameraDistanceFactor = 1;
+  private readonly diagnostics = new URLSearchParams(window.location.search).has('diagnostics');
+  private collisionCount = 0;
+  private timePenaltyMs = 0;
+  private distancePenaltyM = 0;
+  private flips = 0;
+  private lastS = 0;
+  private completedDistance = 0;
+  private offTrackTimer = 0;
+  private flipTimer = 0;
+  private wrongWayTime = 0;
+  private shake = 0;
+  private readonly flashEl: HTMLDivElement;
+
+  private readonly onKeyDown: (e: KeyboardEvent) => void;
+  private readonly onKeyUp: (e: KeyboardEvent) => void;
+  private readonly onResize: () => void;
+
+  constructor(container: HTMLElement, track: BuiltTrack, opts: GameOptions) {
+    this.container = container;
+    this.track = track;
+    this.opts = opts;
+
+    let graphics = 'medium';
+    try { graphics = localStorage.getItem('drivex.graphics.v1') || 'medium'; } catch { /* storage unavailable */ }
+    try { const distance = localStorage.getItem('drivex.cameraDistance.v1'); this.cameraDistanceFactor = distance === 'near' ? .8 : distance === 'far' ? 1.25 : 1; } catch { /* storage unavailable */ }
+    const quality = renderQuality(graphics);
+    this.renderer = new THREE.WebGLRenderer({ antialias: quality.antialias });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality.pixelRatioCap));
+    // 色彩管线：ACES 色调映射 + 曝光；阴影保持 PCF（共享管线与预览页一致）
+    applyColorPipeline(this.renderer);
+    this.renderer.shadowMap.enabled = quality.shadows;
+    container.appendChild(this.renderer.domElement);
+    this.renderer.domElement.className = 'game-canvas';
+
+    // 天空渐变穹顶 + 与地平线同色的线性雾（远处物体渐隐融入天际线）
+    this.scene.fog = new THREE.Fog(SKY_HORIZON, 260, 1100);
+    this.scene.add(createSkyDome(1500));
+
+    this.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 2000);
+    this.camera.position.set(0, 6, 20);
+    this.camera.lookAt(0, 0, 0);
+
+    // 环境光：半球补光 + PMREM 天光（车身金属反射不再死黑；强度与 ACES 重配）
+    this.scene.add(new THREE.HemisphereLight(0xbfd9ff, 0x6d7f66, 0.65));
+    const env = bakeEnvironment(this.renderer);
+    if (env) {
+      this.scene.environment = env;
+      this.scene.environmentIntensity = 0.5;
+    }
+    // 太阳：阴影相机纹素对齐跟随（update 与光偏移都吸附网格，消除亚像素抖动）
+    this.sunFollower = createSunFollower(this.scene, 180, Math.min(this.renderer.capabilities.maxTextureSize, quality.shadowSize));
+
+    this.scene.add(track.group);
+    this.car = buildCar(opts.carColor);
+    this.scene.add(this.car.group);
+    // 轮子改为场景直属子节点：物理返回的是世界坐标变换，作为车体子节点会双重偏移（曾导致轮子“消失”）
+    for (const wheel of this.car.wheels) {
+      this.scene.add(wheel);
+    }
+
+    this.physics = new CarPhysics();
+    this.physics.addGround(track.physics.ground);
+    for (const b of track.physics.barriers) {
+      this.physics.addGround(b);
+      this.physics.markBarrier(b);
+    }
+    this.physics.onBarrierCollide = (impact) => {
+      this.collisionCount++;
+      if (impact < 6) return;
+      this.shake = Math.min(0.5, 0.12 + impact * 0.008);
+      this.audio.impact(impact);
+      this.flashEl.classList.remove('active');
+      void this.flashEl.offsetWidth; // 重启动画
+      this.flashEl.classList.add('active');
+    };
+
+    this.flashEl = document.createElement('div');
+    this.flashEl.className = 'collision-flash';
+    container.appendChild(this.flashEl);
+
+    const startIdx = findSafeSpawnIndex(track, 0);
+    const start = track.points[startIdx];
+    const tangent = track.tangents[startIdx].clone();
+    tangent.y = 0;
+    tangent.normalize();
+    const startQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
+    this.physics.reset(
+      new CANNON.Vec3(start.x, start.y + CHASSIS_SPAWN_HEIGHT, start.z),
+      new CANNON.Quaternion(startQuat.x, startQuat.y, startQuat.z, startQuat.w),
+    );
+    this.car.group.position.set(start.x, start.y + CHASSIS_SPAWN_HEIGHT, start.z);
+    this.car.group.quaternion.copy(startQuat);
+    this.camera.position.copy(start.clone().sub(tangent.clone().multiplyScalar(8)).add(new THREE.Vector3(0, 3.4, 0)));
+    this.cameraLook.copy(start.clone().add(tangent.clone().multiplyScalar(4)));
+    this.camera.lookAt(this.cameraLook);
+
+    this.hud = createHUD(container, opts.mode === 'free-roam', this.bindings);
+    this.minimap = opts.mode === 'free-roam' ? createVillageMinimap(this.hud.minimap) : createMinimapRenderer(this.hud.minimap, track.points, track.roadWidth);
+    this.hud.onBack(() => opts.onBack());
+    this.hud.onRestart(() => opts.onRestart());
+    // 音效：用户手势 context（构造在首页“开始游戏”点击内调用）+ 静音按钮状态
+    this.audio.init();
+    this.hud.setMuteIcon(this.audio.isMuted());
+    this.hud.onToggleMute(() => {
+      this.audio.setMuted(!this.audio.isMuted());
+      this.hud.setMuteIcon(this.audio.isMuted());
+    });
+
+    this.onKeyDown = (e) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+      if (e.code === this.bindings.pause) {
+        e.preventDefault();
+        if (!this.finished) {
+          this.paused = !this.paused;
+          if (this.paused) this.pausedAt = performance.now();
+          else this.startTime += performance.now() - this.pausedAt;
+          this.hud.showPause(this.paused);
+          this.audio.setPaused(this.paused);
+        }
+        return;
+      }
+      if (!e.repeat && e.code === this.bindings.transmission) { this.transmission.toggle(); saveTransmissionMode(this.transmission.mode); }
+      if (!e.repeat && e.code === this.bindings.gearUp) this.transmission.shift(1);
+      if (!e.repeat && e.code === this.bindings.gearDown) this.transmission.shift(-1);
+      if (!e.repeat && e.code === this.bindings.reset) this.respawn('offtrack');
+      if (!e.repeat && e.code === this.bindings.camera) this.cameraMode = (this.cameraMode + 1) % 3;
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', this.bindings.handbrake].includes(e.code)) {
+        e.preventDefault();
+      }
+      this.keys.add(e.code);
+    };
+    this.onKeyUp = (e) => {
+      this.keys.delete(e.code);
+    };
+    this.onResize = () => this.resize();
+
+    window.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('keyup', this.onKeyUp);
+    window.addEventListener('resize', this.onResize);
+    window.addEventListener('blur', this.onBlur);
+    this.resize();
+
+    this.renderer.setAnimationLoop(() => this.tick());
+  }
+
+  private resize(): void {
+    const w = this.container.clientWidth || window.innerWidth;
+    const h = this.container.clientHeight || window.innerHeight;
+    this.renderer.setSize(w, h);
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+  }
+
+  private computeInput(state: ReturnType<CarPhysics['getState']>): VehicleInput {
+    const forward = this.keys.has(this.bindings.accelerate) || this.keys.has('ArrowUp');
+    const back = this.keys.has(this.bindings.brake) || this.keys.has('ArrowDown');
+    const left = this.keys.has(this.bindings.left) || this.keys.has('ArrowLeft');
+    const right = this.keys.has(this.bindings.right) || this.keys.has('ArrowRight');
+    let throttle = 0;
+    let brake = 0;
+    if (this.keys.has(this.bindings.reverse)) { if (state.forwardSpeed > 1) brake = 1; else throttle = -0.55; }
+    else if (forward) { if (state.forwardSpeed < -1) brake = 1; else throttle = 1; }
+    else if (back) brake = 1;
+    // 用户反馈左右方向反了：左键 → +1（左转）
+    const steering = (left ? 1 : 0) - (right ? 1 : 0);
+    return { throttle, brake, steering, handbrake: this.keys.has(this.bindings.handbrake) };
+  }
+
+  private tick(): void {
+    const dt = Math.min(0.05, this.clock.getDelta());
+    this.shake = Math.max(0, this.shake - dt * 1.2);
+    let state: ReturnType<CarPhysics['getState']>;
+
+    if (!this.paused && !this.finished) {
+      const input = this.computeInput(this.physics.getState());
+      input.driveFactor = this.transmission.update(this.physics.getState().forwardSpeed, input.throttle, this.keys.has(this.bindings.clutch), dt);
+      this.physics.update(input, dt);
+      this.car.setBraking(input.brake > 0 || !!input.handbrake);
+      state = this.physics.getState();
+      this.audio.update(state.absoluteSpeed, input.throttle, this.physics.getDrifting(), this.transmission.rpm);
+      this.syncVisual(state);
+      this.updateRules(state, dt);
+    } else {
+      state = this.physics.getState();
+    }
+
+    // 太阳阴影相机跟随车辆（焦点吸附阴影纹素网格，阴影边缘零亚像素抖动）
+    this.sunFocus.set(state.position.x, state.position.y, state.position.z);
+    this.sunFollower.update(this.sunFocus);
+
+    this.updateCamera(dt, state);
+    this.hud.update({
+      speedKmh: Math.hypot(state.velocity.x, state.velocity.z) * 3.6,
+      gear: state.forwardSpeed < -0.5 ? 'R' : String(this.transmission.gear),
+      rpm: this.transmission.rpm,
+      transmission: this.transmission.mode,
+      elapsedMs: (this.paused ? this.pausedAt : performance.now()) - this.startTime,
+      timePenaltyMs: this.timePenaltyMs,
+      distancePenaltyM: this.distancePenaltyM,
+      drift: this.physics.getDrifting(),
+    });
+    this.minimap.draw(state.position, Math.atan2(state.forward.x, state.forward.z));
+    if (this.diagnostics) {
+      const index = this.nearestIndex(state.position);
+      const next = this.track.points[(index + 20) % this.track.points.length];
+      const far = this.track.points[(index + 38) % this.track.points.length];
+      (window as unknown as { driveXDiagnostics: unknown }).driveXDiagnostics = {
+        position: {x:state.position.x, y:state.position.y, z:state.position.z},
+        forward: {x:state.forward.x, y:state.forward.y, z:state.forward.z},
+        speed: state.forwardSpeed, up: state.up.y,
+        next: {x:next.x,z:next.z}, far: {x:far.x,z:far.z},
+        index, totalPoints: this.track.points.length, completedDistance: this.completedDistance,
+        totalLength: this.track.totalLength, contacts: this.physics.debugWheelStates().filter(w => w.isInContact).length,
+        collisions: this.collisionCount, paused: this.paused, finished: this.finished, gear:this.transmission.gear, rpm:this.transmission.rpm,
+      };
+    }
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  private syncVisual(state: ReturnType<CarPhysics['getState']>): void {
+    const p = state.position;
+    const q = state.quaternion;
+    this.car.group.position.set(p.x, p.y, p.z);
+    this.car.group.quaternion.set(q.x, q.y, q.z, q.w);
+    for (let i = 0; i < this.car.wheels.length; i++) {
+      const t = this.physics.getWheelTransform(i);
+      this.car.wheels[i].position.set(t.position.x, t.position.y, t.position.z);
+      this.car.wheels[i].quaternion.set(t.quaternion.x, t.quaternion.y, t.quaternion.z, t.quaternion.w);
+    }
+  }
+
+  private nearestIndex(pos: { x: number; y: number; z: number }): number {
+    let best = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < this.track.points.length; i++) {
+      const p = this.track.points[i];
+      const dx = pos.x - p.x;
+      const dy = pos.y - p.y;
+      const dz = pos.z - p.z;
+      const d = dx * dx + dy * dy + dz * dz;
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    return best;
+  }
+
+  private respawn(reason: 'flip' | 'offtrack' | 'wrongway'): void {
+    if (this.opts.mode === 'free-roam') {
+      const p = this.physics.getState().position;
+      const spawn = worldRecovery(p.x, p.z);
+      const rotation = new CANNON.Quaternion().setFromEuler(0, spawn.heading, 0);
+      this.physics.reset(new CANNON.Vec3(spawn.x, CHASSIS_SPAWN_HEIGHT, spawn.z), rotation);
+      this.flipTimer = 0; this.offTrackTimer = 0; return;
+    }
+    if (reason === 'flip') this.flips += 1;
+    const state = this.physics.getState();
+    const idx = findSafeSpawnIndex(this.track, this.nearestIndex(state.position));
+    const respawnS = this.track.lengths[idx];
+    // 距离惩罚下限 10m：小回退也按 10m 计；实际回退更远时按实际距离累加。
+    this.distancePenaltyM += respawnDistancePenaltyM(this.lastS, respawnS);
+    this.timePenaltyMs += TIME_PENALTY_MS;
+
+    const p = this.track.points[idx];
+    const tangent = this.track.tangents[idx].clone();
+    tangent.y = 0;
+    tangent.normalize();
+    const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
+    this.physics.reset(
+      new CANNON.Vec3(p.x, p.y + CHASSIS_SPAWN_HEIGHT, p.z),
+      new CANNON.Quaternion(quat.x, quat.y, quat.z, quat.w),
+    );
+    this.lastS = respawnS;
+    this.offTrackTimer = 0;
+    this.flipTimer = 0;
+  }
+
+  private updateRules(state: ReturnType<CarPhysics['getState']>, dt: number): void {
+    const dtMs = dt * 1000;
+    if (this.opts.mode === 'free-roam') {
+      const angleDeg = Math.acos(Math.min(1, Math.max(-1, state.up.y))) * 180 / Math.PI;
+      this.flipTimer = angleDeg > FLIP_ANGLE_DEG ? this.flipTimer + dtMs : 0;
+      if (this.flipTimer > FLIP_HOLD_MS || state.position.y < -8) this.respawn('flip');
+      return;
+    }
+    const pos = state.position;
+    const idx = this.nearestIndex(pos);
+    const p = this.track.points[idx];
+    const s = this.track.lengths[idx];
+    const halfWidth = this.track.halfWidths[idx];
+
+    // 脱轨判定（水平距离）
+    const dx = pos.x - p.x;
+    const dz = pos.z - p.z;
+    const horizontalDist = Math.hypot(dx, dz);
+    if (horizontalDist > halfWidth + OFFTRACK_MARGIN) {
+      this.offTrackTimer += dtMs;
+    } else {
+      this.offTrackTimer = 0;
+    }
+    if (this.offTrackTimer > OFFTRACK_HOLD_MS) {
+      this.respawn('offtrack');
+      return;
+    }
+
+    // 翻车判定（车身上向量偏离竖直）
+    const angleDeg = (Math.acos(Math.min(1, Math.max(-1, state.up.y))) * 180) / Math.PI;
+    if (angleDeg > FLIP_ANGLE_DEG) {
+      this.flipTimer += dtMs;
+    } else {
+      this.flipTimer = 0;
+    }
+    if (this.flipTimer > FLIP_HOLD_MS) {
+      this.respawn('flip');
+      return;
+    }
+
+    // 坠落兜底
+    if (pos.y < -8) {
+      this.respawn('offtrack');
+      return;
+    }
+
+    // 逆行检测：只有“车头朝后且沿车头方向前进”才算逆行；倒车不受影响，持续 3s → 警告并重生
+    const tangent = this.track.tangents[idx];
+    if (isWrongWay(state.forward, tangent, state.forwardSpeed)) {
+      this.wrongWayTime += dtMs;
+    } else {
+      this.wrongWayTime = 0;
+    }
+    this.hud.showWrongWay(this.wrongWayTime > 0);
+    if (this.wrongWayTime > WRONG_WAY_HOLD_MS) {
+      this.wrongWayTime = 0;
+      this.respawn('wrongway');
+      return;
+    }
+
+    // 进度与冲线（判断必须基于上一帧的 lastS）
+    const progress = updateLapProgress(s, this.lastS, this.track.totalLength, this.completedDistance);
+    this.completedDistance = progress.completedDistance;
+    this.lastS = s;
+    if (progress.crossedLine && this.completedDistance > this.track.totalLength * 0.7) {
+      this.finish();
+    }
+  }
+
+  private finish(): void {
+    if (this.finished) return;
+    this.finished = true;
+    const elapsed = performance.now() - this.startTime;
+    const lapTimeMs =
+      elapsed + this.timePenaltyMs + this.distancePenaltyM * DISTANCE_PENALTY_SEC_PER_M * 1000;
+    void addLeaderboardEntry({
+      trackId: this.track.meta.id,
+      playerName: this.opts.playerName,
+      lapTimeMs,
+      timePenaltyMs: this.timePenaltyMs,
+      distancePenaltyM: this.distancePenaltyM,
+      flips: this.flips,
+      date: Date.now(),
+    });
+    this.hud.showResult({ lapTimeMs, timePenaltyMs: this.timePenaltyMs, distancePenaltyM: this.distancePenaltyM });
+    this.audio.setPaused(true);
+  }
+
+  private updateCamera(dt: number, state: ReturnType<CarPhysics['getState']>): void {
+    const pos = new THREE.Vector3(state.position.x, state.position.y, state.position.z);
+    const forward = new THREE.Vector3(state.forward.x, state.forward.y, state.forward.z);
+    // Keep the horizon stable while smoothing both position and look target.
+    forward.y = 0;
+    if (forward.lengthSq() < 0.001) forward.set(0, 0, 1);
+    forward.normalize();
+    const speed = Math.min(1, state.absoluteSpeed / 45);
+    const bonnet = this.cameraMode === 2;
+    const distance = (this.cameraMode === 0 ? 7.2 + speed * 1.3 : 5.8) * this.cameraDistanceFactor;
+    const desired = bonnet
+      ? pos.clone().add(forward.clone().multiplyScalar(1.0)).add(new THREE.Vector3(0, 0.95, 0))
+      : pos.clone().sub(forward.clone().multiplyScalar(distance)).add(new THREE.Vector3(0, this.cameraMode === 0 ? 2.8 : 2.25, 0));
+    if (this.shake > 0) {
+      desired.x += (Math.random() - 0.5) * this.shake * 0.4;
+      desired.y += (Math.random() - 0.5) * this.shake * 0.4;
+    }
+    const alpha = 1 - Math.exp(-5 * dt);
+    this.camera.position.lerp(desired, alpha);
+    const lookTarget = bonnet ? desired.clone().add(forward.clone().multiplyScalar(25)) : pos.clone().add(forward.clone().multiplyScalar(5 + speed * 3)).add(new THREE.Vector3(0, 0.45, 0));
+    this.cameraLook.lerp(lookTarget, 1 - Math.exp(-7 * dt));
+    this.camera.lookAt(this.cameraLook);
+    const fov = 58 + speed * 5;
+    if (Math.abs(this.camera.fov - fov) > 0.05) { this.camera.fov += (fov - this.camera.fov) * alpha; this.camera.updateProjectionMatrix(); }
+
+  }
+
+  dispose(): void {
+    this.renderer.setAnimationLoop(null);
+    window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
+    window.removeEventListener('resize', this.onResize);
+    window.removeEventListener('blur', this.onBlur);
+    if (this.diagnostics) delete (window as unknown as { driveXDiagnostics?: unknown }).driveXDiagnostics;
+    this.physics.dispose();
+    this.car.dispose();
+    this.scene.remove(this.track.group);
+    disposeSceneGeometry(this.track.group);
+    this.audio.dispose();
+    this.sunFollower.dispose();
+    this.scene.environment?.dispose();
+    this.scene.environment = null;
+    this.renderer.dispose();
+    this.container.innerHTML = '';
+  }
+}
