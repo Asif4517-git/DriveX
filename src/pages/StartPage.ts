@@ -23,10 +23,16 @@ export function mountStartPage(root: HTMLElement): () => void {
   root.innerHTML = `
     <div id="preview-background" class="preview-background"></div><div class="page-overlay"></div>
     <div class="page start-page">
-      <nav class="top-nav"><a class="brand" href="#/start" aria-label="DriveX home">DRIVE<span>X</span><small> / DRIVING EXPERIENCE</small></a><div class="nav-links"><a href="#session">SESSION</a><a href="#/garage">GARAGE</a><a href="#/controls">SETTINGS</a><a href="#/about">ABOUT</a><span>v0.1.0</span></div></nav>
-      <div class="hero"><div class="hero-copy"><div class="eyebrow"><i></i> THE DRIVING EXPERIENCE</div><h1>Make every<br><em>drive count.</em></h1><p>Take the wheel for a circuit time trial or explore the early free-roam world.</p><div class="hero-actions"><button id="btn-start" class="hero-button" disabled>LOADING <span>↗</span></button><a class="hero-secondary" href="#/garage">OPEN GARAGE →</a><a class="hero-secondary" href="#session">SESSION ↓</a></div><div class="hero-note"><span>TIME TRIAL / FREE ROAM</span><span>DESKTOP · KEYBOARD</span></div></div>
-      <aside class="hero-aside"><span>CONCEPT 01 / COUPÉ</span><div><b>READY TO DRIVE</b><small>REAR CHASE CAMERA</small></div></aside></div>
-      <div class="mode-strip" aria-label="Driving modes"><a href="#session" class="mode-active"><small>01</small> TIME TRIAL <span>AVAILABLE</span></a><a href="#/world"><small>02</small> FREE ROAM <span>EARLY WORLD</span></a><span><small>03</small> CIRCUIT RACE <i>IN DEVELOPMENT</i></span><span><small>04</small> RALLY / DRAG <i>IN DEVELOPMENT</i></span></div>
+      <nav class="top-nav"><a class="brand" href="#/start" aria-label="DriveX home">DRIVE<span>X</span><small> / DRIVING EXPERIENCE</small></a><div class="nav-links"><a href="#/garage">GARAGE</a><a href="#/controls">SETTINGS</a><a href="#/about">ABOUT</a></div></nav>
+      <div class="home-stage">
+        <div class="home-title"><div class="eyebrow"><i></i> THE DRIVING EXPERIENCE</div><h1>Drive<br><em>your way.</em></h1><p>Find your rhythm on the circuit or take the long way home.</p><div class="home-version">CONCEPT COUPÉ &nbsp; / &nbsp; SINGLE PLAYER</div></div>
+        <div class="home-actions" aria-label="Choose a driving mode"><span class="home-actions-label">SELECT YOUR DRIVE</span>
+          <button id="btn-start" class="home-action primary" disabled><span><small>01 / TIME TRIAL</small><strong>Drive the circuit</strong><em>One lap. Set your best time.</em></span><b>↗</b></button>
+          <a href="#/world" class="home-action"><span><small>02 / FREE ROAM</small><strong>Explore the roads</strong><em>Open driving in the village prototype.</em></span><b>↗</b></a>
+          <div class="home-utility"><a href="#/garage">GARAGE <span>↗</span></a><a href="#session">SESSION SETUP <span>↓</span></a></div>
+          <div class="home-coming">PROVING GROUND &nbsp; / &nbsp; COMING LATER</div>
+        </div>
+      </div>
       <div class="section-heading" id="session"><div><span class="eyebrow">YOUR SESSION</span><h2>Set up your drive.</h2></div><p>Choose your route, set your name, and get behind the wheel.</p></div>
       <div class="start-grid">
         <section class="panel"><div class="card-index">01 / DRIVER</div><h2>Driver &amp; vehicle</h2><p class="card-desc">Set your driver identity and choose a colour.</p>
@@ -130,7 +136,7 @@ export function mountStartPage(root: HTMLElement): () => void {
     ensurePreview();
     renderTrackInfo();
     await renderLeaderboard();
-    if (!disposed) { const button = root.querySelector<HTMLButtonElement>('#btn-start'); if (button) { button.disabled = false; button.innerHTML = 'DRIVE NOW <span>↗</span>'; } }
+    if (!disposed) { const button = root.querySelector<HTMLButtonElement>('#btn-start'); if (button) { button.disabled = false; button.innerHTML = '<span><small>01 / TIME TRIAL</small><strong>Drive the circuit</strong><em>One lap. Set your best time.</em></span><b>↗</b>';  } }
   }
 
   function ensurePreview(): void {

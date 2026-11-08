@@ -672,3 +672,43 @@ a { color: inherit; } a:focus-visible, button:focus-visible, input:focus-visible
 .hud-back:focus-visible,.hud-audio:focus-visible {outline:2px solid #f4b18c;outline-offset:3px}
 .hud-hint {max-width:calc(100% - 520px);text-align:center;line-height:1.4}
 @media(max-width:600px){.hud-audio{top:60px;right:12px}.hud-session{max-width:calc(100% - 150px)}.hud-dashboard{width:min(180px,48vw)}.hud-minimap{width:min(120px,34vw);height:min(120px,34vw)}}
+
+/* DriveX home: explicit mode selection alongside the live 3D scene. */
+.start-page { max-width: 1600px; padding: 0 5% 60px; }
+.start-page .top-nav { border-bottom: 1px solid #ffffff30; }
+.home-stage { min-height: 690px; display: grid; grid-template-columns: 1fr minmax(320px, 410px); align-items: center; gap: 8%; }
+.home-title { align-self: end; padding: 0 0 110px; max-width: 560px; }
+.home-title h1 { margin: 22px 0; font-size: clamp(64px, 7vw, 106px); line-height: .92; letter-spacing: -.065em; }
+.home-title h1 em { font-style: normal; color: #e1e8e2; }
+.home-title p { color: #c6d2cd; font-size: 18px; line-height: 1.6; max-width: 340px; }
+.home-version { color: #a7b5b0; font-size: 11px; letter-spacing: .15em; margin-top: 40px; }
+.home-actions { background: rgba(13,22,24,.92); border: 1px solid #ffffff30; padding: 26px; display:flex; flex-direction:column; gap:10px; }
+.home-actions-label { color: #c5d0cb; font-size: 11px; font-weight:700; letter-spacing: .18em; margin-bottom: 12px; }
+.home-action { width:100%; min-height:114px; padding:18px 20px; display:flex; align-items:center; justify-content:space-between; text-align:left; color:#f1f5f1; text-decoration:none; cursor:pointer; border:1px solid #687977; background:#233332; transition:background .2s, transform .2s; }
+.home-action.primary { color:#101d1b; background:#e7eee8; border-color:#e7eee8; }
+.home-action:disabled { opacity:.6; cursor:wait; }
+.home-action:not(:disabled):hover { transform:translateX(4px); background:#344a47; }
+.home-action.primary:not(:disabled):hover { background:white; }
+.home-action span { display:flex; flex-direction:column; gap:6px; }
+.home-action small { font-size:10px; letter-spacing:.16em; font-weight:800; opacity:.72; }
+.home-action strong { font-size:21px; letter-spacing:-.02em; }
+.home-action em { font-size:12px; font-style:normal; opacity:.75; }
+.home-action b { font-size:25px; font-weight:400; }
+.home-utility { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.home-utility a { min-height:58px; padding:16px; display:flex; justify-content:space-between; align-items:center; border:1px solid #687977; color:#f3f5f1; text-decoration:none; font-size:11px; font-weight:800; letter-spacing:.08em; }
+.home-utility a:hover { background:#344a47; }
+.home-coming { padding-top:12px; color:#a0b0a9; font-size:10px; letter-spacing:.12em; }
+.home-action:focus-visible,.home-utility a:focus-visible,.nav-links a:focus-visible { outline:3px solid #efad86; outline-offset:3px; }
+.start-page .section-heading { padding-top: 35px; border-top:1px solid #ffffff32; }
+.start-page .panel { padding:28px; }
+.start-page .field input,.start-page .field select { min-height:48px; }
+.start-page .track-actions .btn { min-height:44px; padding:10px 14px; font-size:12px; }
+.garage-views button { min-height:46px; padding:12px 18px; font-size:11px; }
+.garage-panel .hero-button { min-height:56px; }
+.hud-dashboard { width:300px; padding:20px 24px; }
+.hud-speed-line strong { font-size:38px; }
+.hud-timer strong { font-size:24px; }
+.hud-session { min-width:230px; }
+.hud-back,.hud-audio { min-height:46px; }
+@media(max-width:850px) { .home-stage { min-height:0; grid-template-columns:1fr; gap:28px; padding:90px 0 55px; } .home-title { padding:0; } .home-actions { max-width:520px; } .home-title h1 { font-size:clamp(64px,12vw,90px); } .hud-dashboard { width:220px; } .hud-speed-line strong { font-size:28px; } }
+@media(max-width:600px) { .start-page { padding:0 18px 40px; } .home-stage { padding:65px 0 40px; } .home-actions { padding:16px; } .home-action { min-height:100px; } .home-action strong { font-size:18px; } .hud-dashboard { width:min(190px,48vw); padding:14px; } .hud-speed-line strong { font-size:24px; } .hud-session { min-width:0; } .hud-timer strong { font-size:19px; } }

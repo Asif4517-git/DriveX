@@ -1,5 +1,14 @@
 # DriveX 0.1.0 — development status
 
+## Handover reconstruction pass — current session
+
+**Partial; the requested full reconstruction is not complete.** The main menu now puts large time-trial and free-roam actions in a dedicated panel alongside the existing live 3D scene, with garage and session setup links. Garage view buttons and HUD typography have been enlarged. Existing routes and saved settings remain in use. No proving ground, obstacle course, performance-testing telemetry, extra vehicles, realistic Kerala environment or comprehensive garage/settings/HUD redesign was implemented in this pass.
+
+The actual physics uses Cannon RaycastVehicle plus a contact-weighted horizontal-velocity damping assist; it is not a validated tire model. Existing test `tests/crossing.spec.ts` requires a 9 m turning radius at around 60 km/h, a highly aggressive target that conflicts with the reported handling concerns. An experimental speed-dependent steering limit reduced rotation but failed five existing cornering/handbrake checks, and was reverted rather than shipping an unverified regression. **The user's steering complaint remains unresolved** and requires a carefully validated handling model, revised acceptance targets and manual driving tests.
+
+In this workspace, TypeScript, all 80 automated tests and the `/DriveX/` production build passed after the menu changes. Browser UI inspection, production-path HTTP testing, new screenshots, manual handling and audible sound assessment were not completed in this pass. No new third-party assets were introduced; the existing asset ledger remains applicable. Target GT 710 performance and deployed Pages remain unverified. Previous screenshots are historical and do not show the new menu.
+
+
 ## Handling, HUD and environment pass — 2026-11-07
 
 - Reduced peak engine force from 7500 to 3200 and softened throttle application. A horizontal stability assist now applies in proportion to wheel contact during ordinary steering; it is weaker under handbrake, and does not act in the air. Handbrake force was reduced, and combining it with the service brake cannot reduce braking. This is an arcade assist, not validated tire physics; aggressive handbrake use can still produce large slides. The existing speed-sensitive steering curve and Cannon solver remain in place.
